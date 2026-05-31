@@ -90,8 +90,14 @@ export function VoicePicker({
             ? "Default"
             : "",
       }))
-      // Deduplicate by identifier to avoid React key collisions
-      .filter((v, idx, arr) => arr.findIndex((x) => x.identifier === v.identifier) === idx)
+      // Deduplicate: keep first occurrence of each unique identifier
+      // Some devices return the same identifier multiple times with different metadata
+      .reduce<VoiceOption[]>((acc, v) => {
+        if (!acc.some((x) => x.identifier === v.identifier)) {
+          acc.push(v);
+        }
+        return acc;
+      }, [])
         // Sort: Enhanced voices first, then alphabetically by name
         .sort((a, b) => {
           if (a.quality === "Enhanced" && b.quality !== "Enhanced") return -1;
@@ -219,13 +225,13 @@ export function VoicePicker({
 
   return (
     <View style={styles.container}>
-      {voices.map((voice) => {
+      {voices.map((voice, index) => {
         const isSelected = selectedVoiceId === voice.identifier;
         const isPreviewing = previewingId === voice.identifier;
 
         return (
           <Pressable
-            key={voice.identifier}
+            key={`${voice.identifier}-${index}`}
             style={({ pressed }) => [
               styles.voiceRow,
               isSelected && styles.voiceRowSelected,

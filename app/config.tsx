@@ -8,7 +8,7 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
-import { GeneratedStory, StoryLanguage } from "@/shared/types";
+import { AgeGroup, GeneratedStory, StoryLanguage } from "@/shared/types";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LoadingStory } from "@/components/loading-story";
@@ -50,6 +50,7 @@ export default function ConfigScreen() {
   const [storyStyle, setStoryStyle] = useState("Magical");
   const [lengthMinutes, setLengthMinutes] = useState(5);
   const [language, setLanguage] = useState<StoryLanguage>("English");
+  const [ageGroup, setAgeGroup] = useState<AgeGroup>("5-6");
   const [voiceId, setVoiceId] = useState<string | undefined>(undefined);
 
   const generateMutation = trpc.story.generate.useMutation({
@@ -69,6 +70,7 @@ export default function ConfigScreen() {
       style: storyStyle as any,
       lengthMinutes,
       language,
+      ageGroup,
       voiceId,
       storyIdea: storyIdea.trim() || undefined,
     });
@@ -241,6 +243,27 @@ export default function ConfigScreen() {
           </View>
         </View>
 
+        {/* Age Group */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Child's Age</Text>
+          <View style={styles.ageRow}>
+            {(["3-4", "5-6", "7-8", "8+"] as AgeGroup[]).map((ag) => {
+              const sel = ageGroup === ag;
+              return (
+                <TouchableOpacity
+                  key={ag}
+                  style={[styles.ageChip, sel && styles.ageChipSelected]}
+                  onPress={() => { tap(); setAgeGroup(ag); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.ageChipLabel, sel && styles.ageChipLabelSelected]}>{ag}</Text>
+                  <Text style={styles.ageChipSub}>yrs</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* Language */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Language</Text>
@@ -317,6 +340,13 @@ const styles = StyleSheet.create({
   languageLabel: { fontSize: 13, fontWeight: "600", color: "#9B8BB4", textAlign: "center" },
   languageLabelSelected: { color: Y },
   voiceHint: { fontSize: 12, color: "#4A4270", marginBottom: 10, fontStyle: "italic" },
+  // Age group
+  ageRow: { flexDirection: "row", gap: 10 },
+  ageChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 16, borderWidth: 1.5, borderColor: "#2E2A5A", paddingVertical: 14 },
+  ageChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
+  ageChipLabel: { fontSize: 16, fontWeight: "700", color: "#9B8BB4" },
+  ageChipLabelSelected: { color: Y },
+  ageChipSub: { fontSize: 11, color: "#4A4270", marginTop: 2 },
   // Generate button
   generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginTop: 8, elevation: 8 },
   generateBtnText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },

@@ -10,6 +10,13 @@ import { randomUUID } from "crypto";
 // Approximate words per minute for a calm, soothing read-aloud voice
 const WORDS_PER_MINUTE = 110;
 
+const AGE_INSTRUCTIONS: Record<string, string> = {
+  "3-4": "The child is 3–4 years old. Use very simple words (1–2 syllables where possible), very short sentences (5–8 words), and highly repetitive, rhythmic language. Keep the story gentle, slow-paced, and focused on one simple idea.",
+  "5-6": "The child is 5–6 years old. Use simple vocabulary, short sentences, and a clear beginning-middle-end structure. Include a small challenge the character overcomes.",
+  "7-8": "The child is 7–8 years old. Use richer vocabulary, slightly longer sentences, and a more developed plot with mild suspense that resolves peacefully. Include some descriptive imagery.",
+  "8+":  "The child is 8 years or older. Use varied sentence structure, expressive vocabulary, and a well-developed narrative arc with interesting characters and a satisfying, calming resolution.",
+};
+
 const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   English: "Write the story entirely in English.",
   Mandarin:
@@ -37,12 +44,16 @@ function buildStoryPrompt(config: StoryConfig): string {
       ? `The caregiver has suggested this story idea or plot direction: "${config.storyIdea.trim()}". Incorporate this naturally into the story while keeping it gentle and age-appropriate.`
       : "";
 
+  const ageInstruction =
+    AGE_INSTRUCTIONS[config.ageGroup ?? "5-6"] ?? AGE_INSTRUCTIONS["5-6"];
+
   const langInstruction =
     LANGUAGE_INSTRUCTIONS[config.language] ?? LANGUAGE_INSTRUCTIONS["English"];
 
-  return `You are a gentle, imaginative children's story author who writes soothing bedtime stories for children aged 3–6.
+  return `You are a gentle, imaginative children's story author who writes soothing bedtime stories.
 
 ${childNameClause}
+${ageInstruction}
 ${storyIdeaClause}
 ${langInstruction}
 
@@ -108,6 +119,7 @@ export const appRouter = router({
           ]),
           lengthMinutes: z.number().int().min(3).max(10),
           language: z.enum(["English", "Mandarin", "Spanish"]).default("English"),
+          ageGroup: z.enum(["3-4", "5-6", "7-8", "8+"]).default("5-6"),
           voiceId: z.string().optional(),
           storyIdea: z.string().max(300).optional(),
         })

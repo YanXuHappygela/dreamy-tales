@@ -30,6 +30,12 @@ const LANGUAGE_CODES: Record<string, string> = {
 
 type PlayState = "idle" | "playing" | "paused" | "done";
 
+type NarrationSpeed = 0.2 | 0.5 | 0.7 | 0.9 | 1.2 | 1.5;
+
+const SPEED_OPTIONS: NarrationSpeed[] = [0.2, 0.5, 0.7, 0.9, 1.2, 1.5];
+
+const DEFAULT_SPEED: NarrationSpeed = 0.9;
+
 export default function StoryScreen() {
   useKeepAwake();
 
@@ -39,6 +45,8 @@ export default function StoryScreen() {
   const [playState, setPlayState] = useState<PlayState>("idle");
   const [currentParagraph, setCurrentParagraph] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
+  const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
+  const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
   const scrollRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -73,9 +81,10 @@ export default function StoryScreen() {
       const langCode =
         LANGUAGE_CODES[config.language ?? "English"] ?? "en-US";
       const voiceId = config.voiceId;
+      const rate = speedRef.current;
 
       Speech.speak(paragraphs[index], {
-        rate: 0.85,
+        rate,
         pitch: 1.05,
         language: langCode,
         ...(voiceId ? { voice: voiceId } : {}),
@@ -119,6 +128,7 @@ export default function StoryScreen() {
     // idle or done — start from beginning
     setPlayState("playing");
     setCurrentParagraph(0);
+    speedRef.current = speed;
     speakParagraph(0, story.paragraphs, story.config);
   };
 
@@ -257,6 +267,36 @@ export default function StoryScreen() {
               { width: `${progress * 100}%` as any },
             ]}
           />
+        </View>
+
+        {/* Speed toggle */}
+        <View style={styles.speedRow}>
+          {SPEED_OPTIONS.map((s) => (
+            <Pressable
+              key={s}
+              style={({ pressed }) => [
+                styles.speedChip,
+                speed === s && styles.speedChipSelected,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={() => {
+                if (Platform.OS !== "web") {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                setSpeed(s);
+                speedRef.current = s;
+              }}
+            >
+              <Text
+                style={[
+                  styles.speedChipText,
+                  speed === s && styles.speedChipTextSelected,
+                ]}
+              >
+                {s}×
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         <View style={styles.controlRow}>
@@ -398,6 +438,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: Platform.OS === "android" ? 24 : 32,
+  },
+  speedRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  speedChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#1A1740",
+    borderWidth: 1.5,
+    borderColor: "#2E2A5A",
+  },
+  speedChipSelected: {
+    backgroundColor: "#2A1F4A",
+    borderColor: "#C8A2E8",
+  },
+  speedChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#9B8BB4",
+  },
+  speedChipTextSelected: {
+    color: "#C8A2E8",
   },
   progressBar: {
     height: 3,

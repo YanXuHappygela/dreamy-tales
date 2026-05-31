@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,13 +9,17 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
-import { GeneratedStory } from "@/shared/types";
+import { GeneratedStory, StoryLanguage } from "@/shared/types";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LoadingStory } from "@/components/loading-story";
 import { StarfieldBackground } from "@/components/starfield-background";
+import { VoicePicker } from "@/components/voice-picker";
+
+const PREFS_KEY = "dreamy_tales_prefs";
 
 const CHARACTER_OPTIONS = [
   { label: "Bunny", emoji: "🐰" },
@@ -24,6 +28,7 @@ const CHARACTER_OPTIONS = [
   { label: "Robot", emoji: "🤖" },
   { label: "Unicorn", emoji: "🦄" },
   { label: "Bear", emoji: "🐻" },
+  { label: "Custom", emoji: "✏️" },
 ];
 
 const SCENARIO_OPTIONS = [
@@ -45,16 +50,34 @@ const STYLE_OPTIONS = [
 
 const LENGTH_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
+const LANGUAGE_OPTIONS: { label: StoryLanguage; emoji: string }[] = [
+  { label: "English", emoji: "🇬🇧" },
+  { label: "Mandarin", emoji: "🇨🇳" },
+  { label: "Spanish", emoji: "🇪🇸" },
+];
+
 export default function ConfigScreen() {
   const router = useRouter();
   const [childName, setChildName] = useState("");
   const [characterType, setCharacterType] = useState("Bunny");
+  const [customCharacter, setCustomCharacter] = useState("");
   const [scenario, setScenario] = useState("Forest");
   const [storyStyle, setStoryStyle] = useState("Magical");
   const [lengthMinutes, setLengthMinutes] = useState(5);
+  const [language, setLanguage] = useState<StoryLanguage>("English");
+  const [voiceId, setVoiceId] = useState<string | undefined>(undefined);
 
   const generateMutation = trpc.story.generate.useMutation({
-    onSuccess: (data: GeneratedStory) => {
+    onSuccess: async (data: GeneratedStory) => {
+      // Persist language + voice preferences
+      try {
+        await AsyncStorage.setItem(
+          PREFS_KEY,
+          JSON.stringify({ language, voiceId })
+        );
+      } catch {
+        // ignore
+      }
       router.push({
         pathname: "/story",
         params: { storyData: JSON.stringify(data) },
@@ -66,35 +89,39 @@ export default function ConfigScreen() {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
+
+    const resolvedCharacter =
+      characterType === "Custom"
+        ? customCharacter.trim() || "a magical creature"
+        : characterType;
+
     generateMutation.mutate({
       childName: childName.trim() || "the little one",
-      characterType: characterType as
-        | "Bunny"
-        | "Dragon"
-        | "Princess"
-        | "Robot"
-        | "Unicorn"
-        | "Bear",
-      scenario: scenario as
-        | "Forest"
-        | "Space"
-        | "Ocean"
-        | "Castle"
-        | "Jungle"
-        | "Cloud Kingdom",
-      style: storyStyle as
-        | "Funny"
-        | "Magical"
-        | "Adventurous"
-        | "Cozy"
-        | "Mysterious",
+      characterType: resolvedCharacter,
+      customCharacter:
+        characterType === "Custom" ? customCharacter.trim() : undefined,
+      scenario: scenario as any,
+      style: storyStyle as any,
       lengthMinutes,
+      language,
+      voiceId,
     });
   };
 
   const handleBack = () => {
     router.back();
   };
+
+  const handleLanguageChange = useCallback(
+    (lang: StoryLanguage) => {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      setLanguage(lang);
+      setVoiceId(undefined); // reset voice when language changes
+    },
+    []
+  );
 
   // Show loading screen while generating
   if (generateMutation.isPending) {
@@ -174,6 +201,20 @@ export default function ConfigScreen() {
               </Pressable>
             ))}
           </View>
+
+          {/* Custom character text input — shown when "Custom" is selected */}
+          {characterType === "Custom" && (
+            <TextInput
+              style={[styles.textInput, styles.customCharInput]}
+              placeholder="Describe your character, e.g. a tiny wizard fox…"
+              placeholderTextColor="#4A4270"
+              value={customCharacter}
+              onChangeText={setCustomCharacter}
+              maxLength={80}
+              returnKeyType="done"
+              autoFocus
+            />
+          )}
         </View>
 
         {/* Scenario */}
@@ -283,6 +324,47 @@ export default function ConfigScreen() {
           </View>
         </View>
 
+        {/* Language */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Story Language</Text>
+          <View style={styles.languageRow}>
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.label}
+                style={({ pressed }) => [
+                  styles.languageChip,
+                  language === opt.label && styles.languageChipSelected,
+                  pressed && styles.optionChipPressed,
+                ]}
+                onPress={() => handleLanguageChange(opt.label)}
+              >
+                <Text style={styles.languageEmoji}>{opt.emoji}</Text>
+                <Text
+                  style={[
+                    styles.languageLabel,
+                    language === opt.label && styles.languageLabelSelected,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Voice Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Narrator Voice</Text>
+          <Text style={styles.voiceHint}>
+            Tap ▷ to preview a voice before selecting.
+          </Text>
+          <VoicePicker
+            language={language}
+            selectedVoiceId={voiceId}
+            onVoiceSelect={setVoiceId}
+          />
+        </View>
+
         {/* Generate Button */}
         <Pressable
           style={({ pressed }) => [
@@ -356,6 +438,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: "#F0EAF8",
+  },
+  customCharInput: {
+    marginTop: 10,
+    borderColor: "#C8A2E8",
   },
   optionGrid: {
     flexDirection: "row",
@@ -449,6 +535,46 @@ const styles = StyleSheet.create({
   lengthRangeLabel: {
     fontSize: 12,
     color: "#4A4270",
+  },
+  // Language
+  languageRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  languageChip: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#1A1740",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#2E2A5A",
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+  },
+  languageChipSelected: {
+    borderColor: "#C8A2E8",
+    backgroundColor: "#2A1F4A",
+  },
+  languageEmoji: {
+    fontSize: 24,
+  },
+  languageLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#9B8BB4",
+    textAlign: "center",
+  },
+  languageLabelSelected: {
+    color: "#C8A2E8",
+  },
+  voiceHint: {
+    fontSize: 12,
+    color: "#4A4270",
+    marginBottom: 10,
+    fontStyle: "italic",
   },
   generateBtn: {
     flexDirection: "row",

@@ -21,6 +21,13 @@ import { StarfieldBackground } from "@/components/starfield-background";
 import { GeneratedStory, SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 
+// Map our language labels to BCP-47 codes for expo-speech
+const LANGUAGE_CODES: Record<string, string> = {
+  English: "en-US",
+  Mandarin: "zh-CN",
+  Spanish: "es-ES",
+};
+
 type PlayState = "idle" | "playing" | "paused" | "done";
 
 export default function StoryScreen() {
@@ -40,7 +47,6 @@ export default function StoryScreen() {
       try {
         const parsed: GeneratedStory = JSON.parse(params.storyData);
         setStory(parsed);
-        // Fade in story content
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 600,
@@ -56,22 +62,28 @@ export default function StoryScreen() {
   }, [params.storyData, fadeAnim]);
 
   const speakParagraph = useCallback(
-    (index: number, paragraphs: string[]) => {
+    (index: number, paragraphs: string[], config: GeneratedStory["config"]) => {
       if (index >= paragraphs.length) {
         setPlayState("done");
         setCurrentParagraph(0);
         return;
       }
       setCurrentParagraph(index);
+
+      const langCode =
+        LANGUAGE_CODES[config.language ?? "English"] ?? "en-US";
+      const voiceId = config.voiceId;
+
       Speech.speak(paragraphs[index], {
         rate: 0.85,
         pitch: 1.05,
-        language: "en-US",
+        language: langCode,
+        ...(voiceId ? { voice: voiceId } : {}),
         onDone: () => {
-          speakParagraph(index + 1, paragraphs);
+          speakParagraph(index + 1, paragraphs, config);
         },
         onStopped: () => {
-          // stopped externally — handled by handleStop
+          // stopped externally
         },
         onError: () => {
           setPlayState("idle");
@@ -107,7 +119,7 @@ export default function StoryScreen() {
     // idle or done — start from beginning
     setPlayState("playing");
     setCurrentParagraph(0);
-    speakParagraph(0, story.paragraphs);
+    speakParagraph(0, story.paragraphs, story.config);
   };
 
   const handleStop = async () => {
@@ -164,9 +176,11 @@ export default function StoryScreen() {
       ? currentParagraph / totalParagraphs
       : 0;
 
+  const langLabel = story.config.language ?? "English";
+  const langCode = LANGUAGE_CODES[langLabel] ?? "en-US";
+
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
-      {/* Animated starfield background */}
       <StarfieldBackground />
 
       {/* Top bar */}
@@ -212,7 +226,7 @@ export default function StoryScreen() {
               {story.config.style}
             </Text>
             <Text style={styles.metaText}>
-              🕐 ~{story.config.lengthMinutes} min
+              🌐 {langLabel} • 🕐 ~{story.config.lengthMinutes} min
             </Text>
           </View>
 
@@ -236,10 +250,12 @@ export default function StoryScreen() {
 
       {/* Playback controls */}
       <View style={styles.controls}>
-        {/* Progress bar */}
         <View style={styles.progressBar}>
           <View
-            style={[styles.progressFill, { width: `${progress * 100}%` as any }]}
+            style={[
+              styles.progressFill,
+              { width: `${progress * 100}%` as any },
+            ]}
           />
         </View>
 
@@ -275,7 +291,7 @@ export default function StoryScreen() {
             />
           </Pressable>
 
-          {/* Status label */}
+          {/* Status */}
           <View style={styles.statusContainer}>
             <Text style={styles.statusText}>
               {playState === "idle" && "Tap to read"}

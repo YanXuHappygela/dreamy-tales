@@ -46,3 +46,12 @@
 - [x] Loading animation ("Weaving your story…") during generation
 - [x] Haptic feedback on primary actions
 - [x] Child-friendly large tap targets on all pickers
+
+## New Features (Round 2)
+- [x] Custom character text input (alongside preset character chips)
+- [x] Language selector: Mandarin, English, Spanish
+- [x] Update StoryConfig type with language and voiceId fields
+- [x] Voice selection screen/section: load expo-speech voices filtered by language
+- [x] Update server LLM prompt to generate story in selected language
+- [x] Wire selected voiceId to expo-speech speak() call in story screen
+- [x] Persist language + voice preferences in AsyncStorage

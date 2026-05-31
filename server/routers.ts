@@ -10,18 +10,38 @@ import { randomUUID } from "crypto";
 // Approximate words per minute for a calm, soothing read-aloud voice
 const WORDS_PER_MINUTE = 110;
 
+const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  English: "Write the story entirely in English.",
+  Mandarin:
+    "Write the story entirely in Simplified Chinese (Mandarin). Use simple vocabulary appropriate for young children aged 3–6.",
+  Spanish:
+    "Write the story entirely in Spanish. Use simple vocabulary appropriate for young children aged 3–6.",
+};
+
 function buildStoryPrompt(config: StoryConfig): string {
   const wordCount = config.lengthMinutes * WORDS_PER_MINUTE;
-  const childNameClause = config.childName && config.childName !== "the little one"
-    ? `The story is for a child named ${config.childName}.`
-    : "";
+
+  // Resolve the actual character description
+  const characterDesc =
+    config.characterType === "Custom" && config.customCharacter?.trim()
+      ? config.customCharacter.trim()
+      : config.characterType;
+
+  const childNameClause =
+    config.childName && config.childName !== "the little one"
+      ? `The story is for a child named ${config.childName}.`
+      : "";
+
+  const langInstruction =
+    LANGUAGE_INSTRUCTIONS[config.language] ?? LANGUAGE_INSTRUCTIONS["English"];
 
   return `You are a gentle, imaginative children's story author who writes soothing bedtime stories for children aged 3–6.
 
 ${childNameClause}
+${langInstruction}
 
 Write a bedtime story with the following details:
-- Main character: A ${config.characterType}
+- Main character: A ${characterDesc}
 - Setting: ${config.scenario}
 - Story style/mood: ${config.style}
 - Target length: approximately ${wordCount} words (about ${config.lengthMinutes} minutes when read aloud at a calm pace)
@@ -63,20 +83,33 @@ export const appRouter = router({
       .input(
         z.object({
           childName: z.string().max(50).default("the little one"),
-          characterType: z.enum([
-            "Bunny", "Dragon", "Princess", "Robot", "Unicorn", "Bear",
-          ]),
+          characterType: z.string().max(80),
+          customCharacter: z.string().max(80).optional(),
           scenario: z.enum([
-            "Forest", "Space", "Ocean", "Castle", "Jungle", "Cloud Kingdom",
+            "Forest",
+            "Space",
+            "Ocean",
+            "Castle",
+            "Jungle",
+            "Cloud Kingdom",
           ]),
           style: z.enum([
-            "Funny", "Magical", "Adventurous", "Cozy", "Mysterious",
+            "Funny",
+            "Magical",
+            "Adventurous",
+            "Cozy",
+            "Mysterious",
           ]),
           lengthMinutes: z.number().int().min(3).max(10),
+          language: z.enum(["English", "Mandarin", "Spanish"]).default("English"),
+          voiceId: z.string().optional(),
         })
       )
       .mutation(async ({ input }): Promise<GeneratedStory> => {
-        const config: StoryConfig = input;
+        const config: StoryConfig = {
+          ...input,
+          language: input.language as StoryConfig["language"],
+        };
         const prompt = buildStoryPrompt(config);
 
         const response = await invokeLLM({
@@ -92,9 +125,13 @@ export const appRouter = router({
         });
 
         const rawContent = response.choices[0]?.message?.content ?? "{}";
-        const raw: string = typeof rawContent === "string"
-          ? rawContent
-          : rawContent.map((c) => (c.type === "text" ? c.text : "")).join("");
+        const raw: string =
+          typeof rawContent === "string"
+            ? rawContent
+            : rawContent
+                .map((c) => (c.type === "text" ? c.text : ""))
+                .join("");
+
         let parsed: { title?: string; paragraphs?: string[] };
         try {
           parsed = JSON.parse(raw);

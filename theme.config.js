@@ -1,6 +1,6 @@
 /** @type {const} */
 const themeColors = {
-  primary:    { light: '#C8A2E8', dark: '#C8A2E8' },   // soft lavender CTA
+  primary:    { light: '#FFD580', dark: '#FFD580' },   // warm moon yellow — CTA buttons
   background: { light: '#0D0B2B', dark: '#0D0B2B' },   // deep midnight navy
   surface:    { light: '#1A1740', dark: '#1A1740' },   // card/panel background
   foreground: { light: '#F0EAF8', dark: '#F0EAF8' },   // primary text
@@ -9,7 +9,7 @@ const themeColors = {
   success:    { light: '#7BE8A0', dark: '#7BE8A0' },   // completion
   warning:    { light: '#FFD580', dark: '#FFD580' },   // moon/star accent
   error:      { light: '#F87171', dark: '#F87171' },   // errors
-  tint:       { light: '#C8A2E8', dark: '#C8A2E8' },   // tab bar active
+  tint:       { light: '#FFD580', dark: '#FFD580' },   // tab bar active
 };
 
 module.exports = { themeColors };

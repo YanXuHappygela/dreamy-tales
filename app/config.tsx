@@ -1,12 +1,6 @@
 import React, { useState, useCallback } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  TextInput,
-  StyleSheet,
-  Platform,
+  View, Text, ScrollView, Pressable, TextInput, StyleSheet, Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -20,39 +14,30 @@ import { VoicePicker } from "@/components/voice-picker";
 
 const PREFS_KEY = "dreamy_tales_prefs";
 
+// Moon yellow palette
+const Y = "#FFD580";       // moon yellow — primary accent
+const Y_DIM = "#3D3010";   // dark tinted yellow — selected chip bg
+const Y_BORDER = "#FFD580"; // yellow border for selected state
+
 const CHARACTER_OPTIONS = [
-  { label: "Bunny", emoji: "🐰" },
-  { label: "Dragon", emoji: "🐉" },
-  { label: "Princess", emoji: "👸" },
-  { label: "Robot", emoji: "🤖" },
-  { label: "Unicorn", emoji: "🦄" },
-  { label: "Bear", emoji: "🐻" },
+  { label: "Bunny", emoji: "🐰" }, { label: "Dragon", emoji: "🐉" },
+  { label: "Princess", emoji: "👸" }, { label: "Robot", emoji: "🤖" },
+  { label: "Unicorn", emoji: "🦄" }, { label: "Bear", emoji: "🐻" },
   { label: "Custom", emoji: "✏️" },
 ];
-
 const SCENARIO_OPTIONS = [
-  { label: "Forest", emoji: "🌲" },
-  { label: "Space", emoji: "🚀" },
-  { label: "Ocean", emoji: "🌊" },
-  { label: "Castle", emoji: "🏰" },
-  { label: "Jungle", emoji: "🌴" },
-  { label: "Cloud Kingdom", emoji: "☁️" },
+  { label: "Forest", emoji: "🌲" }, { label: "Space", emoji: "🚀" },
+  { label: "Ocean", emoji: "🌊" }, { label: "Castle", emoji: "🏰" },
+  { label: "Jungle", emoji: "🌴" }, { label: "Cloud Kingdom", emoji: "☁️" },
 ];
-
 const STYLE_OPTIONS = [
-  { label: "Funny", emoji: "😄" },
-  { label: "Magical", emoji: "✨" },
-  { label: "Adventurous", emoji: "🗺️" },
-  { label: "Cozy", emoji: "🛋️" },
+  { label: "Funny", emoji: "😄" }, { label: "Magical", emoji: "✨" },
+  { label: "Adventurous", emoji: "🗺️" }, { label: "Cozy", emoji: "🛋️" },
   { label: "Mysterious", emoji: "🔮" },
 ];
-
 const LENGTH_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
-
 const LANGUAGE_OPTIONS: { label: StoryLanguage }[] = [
-  { label: "English" },
-  { label: "Mandarin" },
-  { label: "Spanish" },
+  { label: "English" }, { label: "Mandarin" }, { label: "Spanish" },
 ];
 
 export default function ConfigScreen() {
@@ -69,37 +54,17 @@ export default function ConfigScreen() {
 
   const generateMutation = trpc.story.generate.useMutation({
     onSuccess: async (data: GeneratedStory) => {
-      // Persist language + voice preferences
-      try {
-        await AsyncStorage.setItem(
-          PREFS_KEY,
-          JSON.stringify({ language, voiceId })
-        );
-      } catch {
-        // ignore
-      }
-      router.push({
-        pathname: "/story",
-        params: { storyData: JSON.stringify(data) },
-      } as any);
+      try { await AsyncStorage.setItem(PREFS_KEY, JSON.stringify({ language, voiceId })); } catch { /**/ }
+      router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
     },
   });
 
   const handleGenerate = () => {
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    const resolvedCharacter =
-      characterType === "Custom"
-        ? customCharacter.trim() || "a magical creature"
-        : characterType;
-
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     generateMutation.mutate({
       childName: childName.trim() || "the little one",
-      characterType: resolvedCharacter,
-      customCharacter:
-        characterType === "Custom" ? customCharacter.trim() : undefined,
+      characterType: characterType as any,
+      customCharacter: characterType === "Custom" ? customCharacter.trim() : undefined,
       scenario: scenario as any,
       style: storyStyle as any,
       lengthMinutes,
@@ -109,22 +74,14 @@ export default function ConfigScreen() {
     });
   };
 
-  const handleBack = () => {
-    router.back();
-  };
+  const handleLanguageChange = useCallback((lang: StoryLanguage) => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLanguage(lang);
+    setVoiceId(undefined);
+  }, []);
 
-  const handleLanguageChange = useCallback(
-    (lang: StoryLanguage) => {
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-      setLanguage(lang);
-      setVoiceId(undefined); // reset voice when language changes
-    },
-    []
-  );
+  const tap = () => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); };
 
-  // Show loading screen while generating
   if (generateMutation.isPending) {
     return (
       <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
@@ -143,14 +100,8 @@ export default function ConfigScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.backBtn,
-              pressed && { opacity: 0.6 },
-            ]}
-            onPress={handleBack}
-          >
-            <IconSymbol name="chevron.left" size={22} color="#C8A2E8" />
+          <Pressable style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]} onPress={() => router.back()}>
+            <IconSymbol name="chevron.left" size={22} color={Y} />
           </Pressable>
           <Text style={styles.headerTitle}>Create a Story</Text>
           <View style={{ width: 40 }} />
@@ -170,39 +121,24 @@ export default function ConfigScreen() {
           />
         </View>
 
-        {/* Character Type */}
+        {/* Character */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Main Character</Text>
           <View style={styles.optionGrid}>
-            {CHARACTER_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.label}
-                style={({ pressed }) => [
-                  styles.optionChip,
-                  characterType === opt.label && styles.optionChipSelected,
-                  pressed && styles.optionChipPressed,
-                ]}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                  setCharacterType(opt.label);
-                }}
-              >
-                <Text style={styles.optionEmoji}>{opt.emoji}</Text>
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    characterType === opt.label && styles.optionLabelSelected,
-                  ]}
+            {CHARACTER_OPTIONS.map((opt) => {
+              const sel = characterType === opt.label;
+              return (
+                <Pressable
+                  key={opt.label}
+                  style={({ pressed }) => [styles.chip, sel && styles.chipSelected, pressed && { opacity: 0.7 }]}
+                  onPress={() => { tap(); setCharacterType(opt.label); }}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
+                  <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
-
-          {/* Custom character text input — shown when "Custom" is selected */}
           {characterType === "Custom" && (
             <TextInput
               style={[styles.textInput, styles.customCharInput]}
@@ -221,32 +157,19 @@ export default function ConfigScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Setting</Text>
           <View style={styles.optionGrid}>
-            {SCENARIO_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.label}
-                style={({ pressed }) => [
-                  styles.optionChip,
-                  scenario === opt.label && styles.optionChipSelected,
-                  pressed && styles.optionChipPressed,
-                ]}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                  setScenario(opt.label);
-                }}
-              >
-                <Text style={styles.optionEmoji}>{opt.emoji}</Text>
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    scenario === opt.label && styles.optionLabelSelected,
-                  ]}
+            {SCENARIO_OPTIONS.map((opt) => {
+              const sel = scenario === opt.label;
+              return (
+                <Pressable
+                  key={opt.label}
+                  style={({ pressed }) => [styles.chip, sel && styles.chipSelected, pressed && { opacity: 0.7 }]}
+                  onPress={() => { tap(); setScenario(opt.label); }}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
+                  <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -254,43 +177,30 @@ export default function ConfigScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Style</Text>
           <View style={styles.optionGrid}>
-            {STYLE_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.label}
-                style={({ pressed }) => [
-                  styles.optionChip,
-                  storyStyle === opt.label && styles.optionChipSelected,
-                  pressed && styles.optionChipPressed,
-                ]}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                  setStoryStyle(opt.label);
-                }}
-              >
-                <Text style={styles.optionEmoji}>{opt.emoji}</Text>
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    storyStyle === opt.label && styles.optionLabelSelected,
-                  ]}
+            {STYLE_OPTIONS.map((opt) => {
+              const sel = storyStyle === opt.label;
+              return (
+                <Pressable
+                  key={opt.label}
+                  style={({ pressed }) => [styles.chip, sel && styles.chipSelected, pressed && { opacity: 0.7 }]}
+                  onPress={() => { tap(); setStoryStyle(opt.label); }}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
+                  <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
         {/* Story Idea */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Story Idea
-            <Text style={styles.optionalTag}> (optional)</Text>
+          <Text style={styles.sectionLabel}>
+            Story Idea<Text style={styles.optionalTag}> (optional)</Text>
           </Text>
           <TextInput
             style={[styles.textInput, styles.storyIdeaInput]}
-            placeholder={`e.g. The bunny finds a lost star and returns it to the sky…`}
+            placeholder="e.g. The bunny finds a lost star and returns it to the sky…"
             placeholderTextColor="#4A4270"
             value={storyIdea}
             onChangeText={setStoryIdea}
@@ -312,31 +222,18 @@ export default function ConfigScreen() {
             </View>
           </View>
           <View style={styles.lengthRow}>
-            {LENGTH_OPTIONS.map((min) => (
-              <Pressable
-                key={min}
-                style={({ pressed }) => [
-                  styles.lengthDot,
-                  lengthMinutes === min && styles.lengthDotSelected,
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={() => {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                  setLengthMinutes(min);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.lengthDotLabel,
-                    lengthMinutes === min && styles.lengthDotLabelSelected,
-                  ]}
+            {LENGTH_OPTIONS.map((min) => {
+              const sel = lengthMinutes === min;
+              return (
+                <Pressable
+                  key={min}
+                  style={({ pressed }) => [styles.lengthDot, sel && styles.lengthDotSelected, pressed && { opacity: 0.7 }]}
+                  onPress={() => { tap(); setLengthMinutes(min); }}
                 >
-                  {min}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text style={[styles.lengthDotLabel, sel && styles.lengthDotLabelSelected]}>{min}</Text>
+                </Pressable>
+              );
+            })}
           </View>
           <View style={styles.lengthRange}>
             <Text style={styles.lengthRangeLabel}>3 min</Text>
@@ -348,48 +245,31 @@ export default function ConfigScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Language</Text>
           <View style={styles.languageRow}>
-            {LANGUAGE_OPTIONS.map((opt) => (
-              <Pressable
-                key={opt.label}
-                style={({ pressed }) => [
-                  styles.languageChip,
-                  language === opt.label && styles.languageChipSelected,
-                  pressed && styles.optionChipPressed,
-                ]}
-                onPress={() => handleLanguageChange(opt.label)}
-              >
-                <Text
-                  style={[
-                    styles.languageLabel,
-                    language === opt.label && styles.languageLabelSelected,
-                  ]}
+            {LANGUAGE_OPTIONS.map((opt) => {
+              const sel = language === opt.label;
+              return (
+                <Pressable
+                  key={opt.label}
+                  style={({ pressed }) => [styles.languageChip, sel && styles.languageChipSelected, pressed && { opacity: 0.7 }]}
+                  onPress={() => handleLanguageChange(opt.label)}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text style={[styles.languageLabel, sel && styles.languageLabelSelected]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
-        {/* Voice Selection */}
+        {/* Voice */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Narrator Voice</Text>
-          <Text style={styles.voiceHint}>
-            Tap ▷ to preview a voice before selecting.
-          </Text>
-          <VoicePicker
-            language={language}
-            selectedVoiceId={voiceId}
-            onVoiceSelect={setVoiceId}
-          />
+          <Text style={styles.voiceHint}>Tap ▶ to preview a voice before selecting.</Text>
+          <VoicePicker language={language} selectedVoiceId={voiceId} onVoiceSelect={setVoiceId} />
         </View>
 
-        {/* Generate Button */}
+        {/* Generate */}
         <Pressable
-          style={({ pressed }) => [
-            styles.generateBtn,
-            pressed && styles.generateBtnPressed,
-          ]}
+          style={({ pressed }) => [styles.generateBtn, pressed && styles.generateBtnPressed]}
           onPress={handleGenerate}
         >
           <IconSymbol name="wand.and.stars" size={22} color="#0D0B2B" />
@@ -397,11 +277,8 @@ export default function ConfigScreen() {
         </Pressable>
 
         {generateMutation.isError && (
-          <Text style={styles.errorText}>
-            Something went wrong. Please try again.
-          </Text>
+          <Text style={styles.errorText}>Something went wrong. Please try again.</Text>
         )}
-
         <View style={{ height: 48 }} />
       </ScrollView>
     </ScreenContainer>
@@ -409,235 +286,42 @@ export default function ConfigScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: "#0D0B2B",
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-    marginBottom: 8,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#1A1740",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#F0EAF8",
-  },
-  section: {
-    marginBottom: 28,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#9B8BB4",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 12,
-  },
-  textInput: {
-    backgroundColor: "#1A1740",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2E2A5A",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#F0EAF8",
-  },
-  customCharInput: {
-    marginTop: 10,
-    borderColor: "#C8A2E8",
-  },
-  optionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  optionChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#1A1740",
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#2E2A5A",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minWidth: 90,
-  },
-  optionChipSelected: {
-    borderColor: "#C8A2E8",
-    backgroundColor: "#2A1F4A",
-  },
-  optionChipPressed: {
-    opacity: 0.75,
-  },
-  optionEmoji: {
-    fontSize: 18,
-  },
-  optionLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#9B8BB4",
-  },
-  optionLabelSelected: {
-    color: "#C8A2E8",
-    fontWeight: "700",
-  },
-  lengthHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  lengthBadge: {
-    backgroundColor: "#2A1F4A",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "#C8A2E8",
-  },
-  lengthBadgeText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#C8A2E8",
-  },
-  lengthRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 6,
-  },
-  lengthDot: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: 12,
-    backgroundColor: "#1A1740",
-    borderWidth: 1.5,
-    borderColor: "#2E2A5A",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  lengthDotSelected: {
-    backgroundColor: "#C8A2E8",
-    borderColor: "#C8A2E8",
-  },
-  lengthDotLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#9B8BB4",
-  },
-  lengthDotLabelSelected: {
-    color: "#0D0B2B",
-    fontWeight: "800",
-  },
-  lengthRange: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  lengthRangeLabel: {
-    fontSize: 12,
-    color: "#4A4270",
-  },
-  // Language
-  languageRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  languageChip: {
-    flex: 1,
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#1A1740",
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#2E2A5A",
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-  },
-  languageChipSelected: {
-    borderColor: "#C8A2E8",
-    backgroundColor: "#2A1F4A",
-  },
-  languageLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#9B8BB4",
-    textAlign: "center",
-  },
-  languageLabelSelected: {
-    color: "#C8A2E8",
-  },
-  voiceHint: {
-    fontSize: 12,
-    color: "#4A4270",
-    marginBottom: 10,
-    fontStyle: "italic",
-  },
-  storyIdeaInput: {
-    minHeight: 90,
-    textAlignVertical: "top",
-    paddingTop: 14,
-  },
-  optionalTag: {
-    fontSize: 12,
-    fontWeight: "400",
-    color: "#4A4270",
-    textTransform: "none",
-    letterSpacing: 0,
-  },
-  charCount: {
-    fontSize: 12,
-    color: "#4A4270",
-    textAlign: "right",
-    marginTop: 6,
-  },
-  generateBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: "#C8A2E8",
-    borderRadius: 20,
-    paddingVertical: 18,
-    marginTop: 8,
-    shadowColor: "#C8A2E8",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  generateBtnPressed: {
-    transform: [{ scale: 0.97 }],
-    opacity: 0.9,
-  },
-  generateBtnText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0D0B2B",
-  },
-  errorText: {
-    color: "#F87171",
-    textAlign: "center",
-    marginTop: 12,
-    fontSize: 14,
-  },
+  scroll: { flex: 1, backgroundColor: "#0D0B2B" },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 12 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 16, marginBottom: 8 },
+  backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: "#F0EAF8" },
+  section: { marginBottom: 28 },
+  sectionLabel: { fontSize: 14, fontWeight: "600", color: "#9B8BB4", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
+  textInput: { backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: "#F0EAF8" },
+  customCharInput: { marginTop: 10, borderColor: Y },
+  optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 14, paddingVertical: 10, minWidth: 90 },
+  chipSelected: { borderColor: Y_BORDER, backgroundColor: Y_DIM },
+  chipEmoji: { fontSize: 18 },
+  chipLabel: { fontSize: 14, fontWeight: "500", color: "#9B8BB4" },
+  chipLabelSelected: { color: Y, fontWeight: "700" },
+  storyIdeaInput: { minHeight: 90, textAlignVertical: "top", paddingTop: 14 },
+  optionalTag: { fontSize: 12, fontWeight: "400", color: "#4A4270", textTransform: "none", letterSpacing: 0 },
+  charCount: { fontSize: 12, color: "#4A4270", textAlign: "right", marginTop: 6 },
+  lengthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  lengthBadge: { backgroundColor: Y_DIM, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, borderWidth: 1.5, borderColor: Y },
+  lengthBadgeText: { fontSize: 14, fontWeight: "700", color: Y },
+  lengthRow: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
+  lengthDot: { flex: 1, aspectRatio: 1, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: "#2E2A5A", alignItems: "center", justifyContent: "center", minHeight: 44 },
+  lengthDotSelected: { backgroundColor: Y, borderColor: Y },
+  lengthDotLabel: { fontSize: 14, fontWeight: "600", color: "#9B8BB4" },
+  lengthDotLabelSelected: { color: "#0D0B2B", fontWeight: "800" },
+  lengthRange: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  lengthRangeLabel: { fontSize: 12, color: "#4A4270" },
+  languageRow: { flexDirection: "row", gap: 10 },
+  languageChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 16, borderWidth: 1.5, borderColor: "#2E2A5A", paddingVertical: 14, paddingHorizontal: 8 },
+  languageChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
+  languageLabel: { fontSize: 13, fontWeight: "600", color: "#9B8BB4", textAlign: "center" },
+  languageLabelSelected: { color: Y },
+  voiceHint: { fontSize: 12, color: "#4A4270", marginBottom: 10, fontStyle: "italic" },
+  generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginTop: 8, shadowColor: Y, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 8 },
+  generateBtnPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
+  generateBtnText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
+  errorText: { color: "#F87171", textAlign: "center", marginTop: 12, fontSize: 14 },
 });

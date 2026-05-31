@@ -50,10 +50,10 @@ const STYLE_OPTIONS = [
 
 const LENGTH_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
-const LANGUAGE_OPTIONS: { label: StoryLanguage; emoji: string }[] = [
-  { label: "English", emoji: "🇬🇧" },
-  { label: "Mandarin", emoji: "🇨🇳" },
-  { label: "Spanish", emoji: "🇪🇸" },
+const LANGUAGE_OPTIONS: { label: StoryLanguage }[] = [
+  { label: "English" },
+  { label: "Mandarin" },
+  { label: "Spanish" },
 ];
 
 export default function ConfigScreen() {
@@ -338,7 +338,6 @@ export default function ConfigScreen() {
                 ]}
                 onPress={() => handleLanguageChange(opt.label)}
               >
-                <Text style={styles.languageEmoji}>{opt.emoji}</Text>
                 <Text
                   style={[
                     styles.languageLabel,
@@ -557,9 +556,6 @@ const styles = StyleSheet.create({
   languageChipSelected: {
     borderColor: "#C8A2E8",
     backgroundColor: "#2A1F4A",
-  },
-  languageEmoji: {
-    fontSize: 24,
   },
   languageLabel: {
     fontSize: 13,

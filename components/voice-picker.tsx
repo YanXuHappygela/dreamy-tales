@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -19,30 +19,18 @@ const LANGUAGE_PREFIXES: Record<StoryLanguage, string[]> = {
   Spanish: ["es"],
 };
 
-// Fallback built-in voices when device has none for a language
-const FALLBACK_VOICES: Record<StoryLanguage, { identifier: string; name: string; language: string }[]> = {
-  English: [
-    { identifier: "en-US", name: "English (US)", language: "en-US" },
-    { identifier: "en-GB", name: "English (UK)", language: "en-GB" },
-    { identifier: "en-AU", name: "English (AU)", language: "en-AU" },
-  ],
-  Mandarin: [
-    { identifier: "zh-CN", name: "普通话 (中国大陆)", language: "zh-CN" },
-    { identifier: "zh-TW", name: "國語 (台灣)", language: "zh-TW" },
-    { identifier: "zh-HK", name: "廣東話 (香港)", language: "zh-HK" },
-  ],
-  Spanish: [
-    { identifier: "es-ES", name: "Español (España)", language: "es-ES" },
-    { identifier: "es-MX", name: "Español (México)", language: "es-MX" },
-    { identifier: "es-US", name: "Español (EE.UU.)", language: "es-US" },
-  ],
+// Short preview sentence per language
+const PREVIEW_TEXT: Record<StoryLanguage, string> = {
+  English: "Once upon a time, in a land of stars and moonlight…",
+  Mandarin: "从前，在一个星光闪烁的地方……",
+  Spanish: "Había una vez, en un lugar lleno de estrellas…",
 };
 
 export interface VoiceOption {
   identifier: string;
   name: string;
   language: string;
-  quality?: string;
+  quality: string; // "Enhanced" | "Default" | ""
 }
 
 interface VoicePickerProps {
@@ -51,86 +39,150 @@ interface VoicePickerProps {
   onVoiceSelect: (voiceId: string) => void;
 }
 
-export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoicePickerProps) {
+export function VoicePicker({
+  language,
+  selectedVoiceId,
+  onVoiceSelect,
+}: VoicePickerProps) {
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const previewingRef = useRef<string | null>(null);
 
   const loadVoices = useCallback(async () => {
     setLoading(true);
+    setPreviewingId(null);
+    previewingRef.current = null;
+
+    // Stop any ongoing speech when language changes
+    try {
+      await Speech.stop();
+    } catch {
+      // ignore
+    }
+
     try {
       const prefixes = LANGUAGE_PREFIXES[language];
-      let available: VoiceOption[] = [];
 
-      if (Platform.OS !== "web") {
-        const all = await Speech.getAvailableVoicesAsync();
-        available = all
-          .filter((v) =>
-            prefixes.some((prefix) =>
-              v.language?.toLowerCase().startsWith(prefix.toLowerCase())
-            )
+      if (Platform.OS === "web") {
+        // expo-speech voice enumeration is not reliable on web
+        setVoices([]);
+        setLoading(false);
+        return;
+      }
+
+      const all = await Speech.getAvailableVoicesAsync();
+
+      const filtered: VoiceOption[] = all
+        .filter((v) =>
+          prefixes.some((prefix) =>
+            (v.language ?? "").toLowerCase().startsWith(prefix.toLowerCase())
           )
-          .map((v) => ({
-            identifier: v.identifier,
-            name: v.name,
-            language: v.language,
-            quality: v.quality,
-          }));
-      }
+        )
+        .map((v) => ({
+          identifier: v.identifier,
+          name: v.name ?? v.identifier,
+          language: v.language ?? "",
+          quality:
+            v.quality === Speech.VoiceQuality.Enhanced
+              ? "Enhanced"
+              : v.quality === Speech.VoiceQuality.Default
+              ? "Default"
+              : "",
+        }))
+        // Sort: Enhanced voices first, then alphabetically by name
+        .sort((a, b) => {
+          if (a.quality === "Enhanced" && b.quality !== "Enhanced") return -1;
+          if (a.quality !== "Enhanced" && b.quality === "Enhanced") return 1;
+          return a.name.localeCompare(b.name);
+        });
 
-      // Always include fallback voices, deduplicating by identifier
-      const fallbacks = FALLBACK_VOICES[language];
-      const existingIds = new Set(available.map((v) => v.identifier));
-      const merged = [
-        ...available,
-        ...fallbacks.filter((f) => !existingIds.has(f.identifier)),
-      ];
+      setVoices(filtered);
 
-      setVoices(merged);
-
-      // Auto-select the first voice if none selected yet
-      if (!selectedVoiceId && merged.length > 0) {
-        onVoiceSelect(merged[0].identifier);
+      // Auto-select the first Enhanced voice, or the first voice overall
+      if (filtered.length > 0) {
+        const currentStillValid = filtered.some(
+          (v) => v.identifier === selectedVoiceId
+        );
+        if (!currentStillValid) {
+          const preferred =
+            filtered.find((v) => v.quality === "Enhanced") ?? filtered[0];
+          onVoiceSelect(preferred.identifier);
+        }
       }
-    } catch {
-      // Fall back gracefully
-      const fallbacks = FALLBACK_VOICES[language];
-      setVoices(fallbacks);
-      if (!selectedVoiceId && fallbacks.length > 0) {
-        onVoiceSelect(fallbacks[0].identifier);
-      }
+    } catch (err) {
+      console.warn("[VoicePicker] Failed to load voices:", err);
+      setVoices([]);
     } finally {
       setLoading(false);
     }
-  }, [language, selectedVoiceId, onVoiceSelect]);
+  }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadVoices();
+    return () => {
+      // Stop preview when component unmounts or language changes
+      Speech.stop().catch(() => {});
+    };
   }, [loadVoices]);
 
-  const handlePreview = async (voice: VoiceOption) => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    await Speech.stop();
-    setPreviewingId(voice.identifier);
+  const handlePreview = useCallback(
+    async (voice: VoiceOption) => {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
 
-    const previewText: Record<StoryLanguage, string> = {
-      English: "Once upon a time, in a land far away…",
-      Mandarin: "从前，在一个遥远的地方……",
-      Spanish: "Había una vez, en un lugar muy lejano…",
-    };
+      // If already previewing this voice, stop it
+      if (previewingRef.current === voice.identifier) {
+        await Speech.stop();
+        previewingRef.current = null;
+        setPreviewingId(null);
+        return;
+      }
 
-    Speech.speak(previewText[language], {
-      voice: voice.identifier,
-      rate: 0.85,
-      pitch: 1.05,
-      language: voice.language,
-      onDone: () => setPreviewingId(null),
-      onStopped: () => setPreviewingId(null),
-      onError: () => setPreviewingId(null),
-    });
-  };
+      // Stop any currently playing preview
+      await Speech.stop();
+
+      previewingRef.current = voice.identifier;
+      setPreviewingId(voice.identifier);
+
+      Speech.speak(PREVIEW_TEXT[language], {
+        voice: voice.identifier,
+        language: voice.language,
+        rate: 0.85,
+        pitch: 1.0,
+        onDone: () => {
+          if (previewingRef.current === voice.identifier) {
+            previewingRef.current = null;
+            setPreviewingId(null);
+          }
+        },
+        onStopped: () => {
+          if (previewingRef.current === voice.identifier) {
+            previewingRef.current = null;
+            setPreviewingId(null);
+          }
+        },
+        onError: () => {
+          previewingRef.current = null;
+          setPreviewingId(null);
+        },
+      });
+    },
+    [language]
+  );
+
+  const handleSelect = useCallback(
+    (voice: VoiceOption) => {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      onVoiceSelect(voice.identifier);
+    },
+    [onVoiceSelect]
+  );
+
+  // ── Render states ────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -141,11 +193,25 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
     );
   }
 
+  if (Platform.OS === "web") {
+    return (
+      <View style={styles.infoBox}>
+        <Text style={styles.infoText}>
+          Voice selection is available on iOS and Android devices. On the web
+          preview, the device default voice will be used.
+        </Text>
+      </View>
+    );
+  }
+
   if (voices.length === 0) {
     return (
-      <Text style={styles.emptyText}>
-        No voices available for this language on your device.
-      </Text>
+      <View style={styles.infoBox}>
+        <Text style={styles.infoText}>
+          No {language} voices found on this device. You can install additional
+          voices in your device's Accessibility → Spoken Content settings.
+        </Text>
+      </View>
     );
   }
 
@@ -163,23 +229,36 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
               isSelected && styles.voiceRowSelected,
               pressed && styles.voiceRowPressed,
             ]}
-            onPress={() => {
-              if (Platform.OS !== "web") {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }
-              onVoiceSelect(voice.identifier);
-            }}
+            onPress={() => handleSelect(voice)}
           >
-            {/* Selection indicator */}
-            <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
+            {/* Radio button */}
+            <View
+              style={[
+                styles.radioOuter,
+                isSelected && styles.radioOuterSelected,
+              ]}
+            >
               {isSelected && <View style={styles.radioInner} />}
             </View>
 
             {/* Voice info */}
             <View style={styles.voiceInfo}>
-              <Text style={[styles.voiceName, isSelected && styles.voiceNameSelected]}>
-                {voice.name}
-              </Text>
+              <View style={styles.voiceNameRow}>
+                <Text
+                  style={[
+                    styles.voiceName,
+                    isSelected && styles.voiceNameSelected,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {voice.name}
+                </Text>
+                {voice.quality === "Enhanced" && (
+                  <View style={styles.qualityBadge}>
+                    <Text style={styles.qualityBadgeText}>HD</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.voiceLang}>{voice.language}</Text>
             </View>
 
@@ -191,10 +270,15 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
                 pressed && { opacity: 0.6 },
               ]}
               onPress={() => handlePreview(voice)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={[styles.previewBtnText, isPreviewing && styles.previewBtnTextActive]}>
-                {isPreviewing ? "▶" : "▷"}
+              <Text
+                style={[
+                  styles.previewIcon,
+                  isPreviewing && styles.previewIconActive,
+                ]}
+              >
+                {isPreviewing ? "■" : "▶"}
               </Text>
             </Pressable>
           </Pressable>
@@ -212,17 +296,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   loadingText: {
     fontSize: 14,
     color: "#9B8BB4",
   },
-  emptyText: {
-    fontSize: 14,
+  infoBox: {
+    backgroundColor: "#1A1740",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#2E2A5A",
+    padding: 14,
+  },
+  infoText: {
+    fontSize: 13,
     color: "#9B8BB4",
-    fontStyle: "italic",
-    paddingVertical: 8,
+    lineHeight: 20,
   },
   voiceRow: {
     flexDirection: "row",
@@ -232,7 +322,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#2E2A5A",
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     gap: 12,
   },
   voiceRowSelected: {
@@ -250,6 +340,7 @@ const styles = StyleSheet.create({
     borderColor: "#4A4270",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   radioOuterSelected: {
     borderColor: "#C8A2E8",
@@ -262,36 +353,57 @@ const styles = StyleSheet.create({
   },
   voiceInfo: {
     flex: 1,
+    minWidth: 0,
+  },
+  voiceNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 3,
   },
   voiceName: {
     fontSize: 14,
     fontWeight: "600",
     color: "#9B8BB4",
-    marginBottom: 2,
+    flexShrink: 1,
   },
   voiceNameSelected: {
     color: "#C8A2E8",
+  },
+  qualityBadge: {
+    backgroundColor: "#3D2F6A",
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    flexShrink: 0,
+  },
+  qualityBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#C8A2E8",
+    letterSpacing: 0.5,
   },
   voiceLang: {
     fontSize: 12,
     color: "#4A4270",
   },
   previewBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#2E2A5A",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   previewBtnActive: {
     backgroundColor: "#C8A2E8",
   },
-  previewBtnText: {
-    fontSize: 14,
+  previewIcon: {
+    fontSize: 13,
     color: "#9B8BB4",
   },
-  previewBtnTextActive: {
+  previewIconActive: {
     color: "#0D0B2B",
   },
 });

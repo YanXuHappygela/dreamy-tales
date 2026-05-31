@@ -55,3 +55,11 @@
 - [x] Update server LLM prompt to generate story in selected language
 - [x] Wire selected voiceId to expo-speech speak() call in story screen
 - [x] Persist language + voice preferences in AsyncStorage
+
+## Voice Picker Fix (Round 3)
+- [x] Load real device voices via Speech.getAvailableVoicesAsync()
+- [x] Show actual voice name, locale, and quality badge (Enhanced/Default)
+- [x] Remove hardcoded fallback voices — show "no voices" message if device has none
+- [x] Fix preview: stop any ongoing speech before starting new preview
+- [x] Auto-select first real voice when language changes
+- [x] Handle web platform gracefully (expo-speech voices not available on web)

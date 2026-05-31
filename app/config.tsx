@@ -61,6 +61,7 @@ export default function ConfigScreen() {
   const [childName, setChildName] = useState("");
   const [characterType, setCharacterType] = useState("Bunny");
   const [customCharacter, setCustomCharacter] = useState("");
+  const [storyIdea, setStoryIdea] = useState("");
   const [scenario, setScenario] = useState("Forest");
   const [storyStyle, setStoryStyle] = useState("Magical");
   const [lengthMinutes, setLengthMinutes] = useState(5);
@@ -105,6 +106,7 @@ export default function ConfigScreen() {
       lengthMinutes,
       language,
       voiceId,
+      storyIdea: storyIdea.trim() || undefined,
     });
   };
 
@@ -364,6 +366,26 @@ export default function ConfigScreen() {
           />
         </View>
 
+        {/* Story Idea */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Story Idea
+            <Text style={styles.optionalTag}> (optional)</Text>
+          </Text>
+          <TextInput
+            style={[styles.textInput, styles.storyIdeaInput]}
+            placeholder={`e.g. The bunny finds a lost star and returns it to the sky…`}
+            placeholderTextColor="#4A4270"
+            value={storyIdea}
+            onChangeText={setStoryIdea}
+            maxLength={300}
+            multiline
+            numberOfLines={3}
+            returnKeyType="done"
+            blurOnSubmit
+          />
+          <Text style={styles.charCount}>{storyIdea.length}/300</Text>
+        </View>
+
         {/* Generate Button */}
         <Pressable
           style={({ pressed }) => [
@@ -571,6 +593,24 @@ const styles = StyleSheet.create({
     color: "#4A4270",
     marginBottom: 10,
     fontStyle: "italic",
+  },
+  storyIdeaInput: {
+    minHeight: 90,
+    textAlignVertical: "top",
+    paddingTop: 14,
+  },
+  optionalTag: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: "#4A4270",
+    textTransform: "none",
+    letterSpacing: 0,
+  },
+  charCount: {
+    fontSize: 12,
+    color: "#4A4270",
+    textAlign: "right",
+    marginTop: 6,
   },
   generateBtn: {
     flexDirection: "row",

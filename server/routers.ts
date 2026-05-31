@@ -32,12 +32,18 @@ function buildStoryPrompt(config: StoryConfig): string {
       ? `The story is for a child named ${config.childName}.`
       : "";
 
+  const storyIdeaClause =
+    config.storyIdea?.trim()
+      ? `The caregiver has suggested this story idea or plot direction: "${config.storyIdea.trim()}". Incorporate this naturally into the story while keeping it gentle and age-appropriate.`
+      : "";
+
   const langInstruction =
     LANGUAGE_INSTRUCTIONS[config.language] ?? LANGUAGE_INSTRUCTIONS["English"];
 
   return `You are a gentle, imaginative children's story author who writes soothing bedtime stories for children aged 3–6.
 
 ${childNameClause}
+${storyIdeaClause}
 ${langInstruction}
 
 Write a bedtime story with the following details:
@@ -103,6 +109,7 @@ export const appRouter = router({
           lengthMinutes: z.number().int().min(3).max(10),
           language: z.enum(["English", "Mandarin", "Spanish"]).default("English"),
           voiceId: z.string().optional(),
+          storyIdea: z.string().max(300).optional(),
         })
       )
       .mutation(async ({ input }): Promise<GeneratedStory> => {

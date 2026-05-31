@@ -11,6 +11,7 @@ export interface StoryConfig {
   lengthMinutes: number;       // 3–10
   language: StoryLanguage;
   voiceId?: string;            // expo-speech voice identifier (optional)
+  storyIdea?: string;          // optional free-text story line description
 }
 
 export interface GeneratedStory {

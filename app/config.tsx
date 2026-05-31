@@ -285,6 +285,26 @@ export default function ConfigScreen() {
           </View>
         </View>
 
+        {/* Story Idea */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Story Idea
+            <Text style={styles.optionalTag}> (optional)</Text>
+          </Text>
+          <TextInput
+            style={[styles.textInput, styles.storyIdeaInput]}
+            placeholder={`e.g. The bunny finds a lost star and returns it to the sky…`}
+            placeholderTextColor="#4A4270"
+            value={storyIdea}
+            onChangeText={setStoryIdea}
+            maxLength={300}
+            multiline
+            numberOfLines={3}
+            returnKeyType="done"
+            blurOnSubmit
+          />
+          <Text style={styles.charCount}>{storyIdea.length}/300</Text>
+        </View>
+
         {/* Story Length */}
         <View style={styles.section}>
           <View style={styles.lengthHeader}>
@@ -364,26 +384,6 @@ export default function ConfigScreen() {
             selectedVoiceId={voiceId}
             onVoiceSelect={setVoiceId}
           />
-        </View>
-
-        {/* Story Idea */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Story Idea
-            <Text style={styles.optionalTag}> (optional)</Text>
-          </Text>
-          <TextInput
-            style={[styles.textInput, styles.storyIdeaInput]}
-            placeholder={`e.g. The bunny finds a lost star and returns it to the sky…`}
-            placeholderTextColor="#4A4270"
-            value={storyIdea}
-            onChangeText={setStoryIdea}
-            maxLength={300}
-            multiline
-            numberOfLines={3}
-            returnKeyType="done"
-            blurOnSubmit
-          />
-          <Text style={styles.charCount}>{storyIdea.length}/300</Text>
         </View>
 
         {/* Generate Button */}

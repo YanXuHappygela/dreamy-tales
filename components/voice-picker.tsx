@@ -79,17 +79,19 @@ export function VoicePicker({
             (v.language ?? "").toLowerCase().startsWith(prefix.toLowerCase())
           )
         )
-        .map((v) => ({
-          identifier: v.identifier,
-          name: v.name ?? v.identifier,
-          language: v.language ?? "",
-          quality:
-            v.quality === Speech.VoiceQuality.Enhanced
-              ? "Enhanced"
-              : v.quality === Speech.VoiceQuality.Default
-              ? "Default"
-              : "",
-        }))
+      .map((v) => ({
+        identifier: v.identifier,
+        name: v.name ?? v.identifier,
+        language: v.language ?? "",
+        quality:
+          v.quality === Speech.VoiceQuality.Enhanced
+            ? "Enhanced"
+            : v.quality === Speech.VoiceQuality.Default
+            ? "Default"
+            : "",
+      }))
+      // Deduplicate by identifier to avoid React key collisions
+      .filter((v, idx, arr) => arr.findIndex((x) => x.identifier === v.identifier) === idx)
         // Sort: Enhanced voices first, then alphabetically by name
         .sort((a, b) => {
           if (a.quality === "Enhanced" && b.quality !== "Enhanced") return -1;
@@ -388,22 +390,29 @@ const styles = StyleSheet.create({
     color: "#4A4270",
   },
   previewBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#2E2A5A",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#C8A2E8",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    shadowColor: "#C8A2E8",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    elevation: 4,
   },
   previewBtnActive: {
-    backgroundColor: "#C8A2E8",
+    backgroundColor: "#F87171",
+    shadowColor: "#F87171",
   },
   previewIcon: {
-    fontSize: 13,
-    color: "#9B8BB4",
+    fontSize: 14,
+    color: "#0D0B2B",
+    fontWeight: "700",
   },
   previewIconActive: {
-    color: "#0D0B2B",
+    color: "#FFFFFF",
   },
 });

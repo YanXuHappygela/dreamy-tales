@@ -171,6 +171,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
     zIndex: 1,
+    elevation: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,

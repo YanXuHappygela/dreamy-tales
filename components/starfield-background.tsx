@@ -57,7 +57,7 @@ export function StarfieldBackground() {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.container]}>
+    <View style={styles.container}>
       {STARS.map((star, i) => (
         <Animated.View
           key={i}
@@ -79,8 +79,11 @@ export function StarfieldBackground() {
 
 const styles = StyleSheet.create({
   container: {
-    pointerEvents: "none",
-    zIndex: 0,
+    ...StyleSheet.absoluteFillObject,
+    // Use style.pointerEvents (new arch compatible) instead of JSX prop
+    pointerEvents: "none" as any,
+    // Ensure stars render behind all content
+    zIndex: -1,
   },
   star: {
     position: "absolute",

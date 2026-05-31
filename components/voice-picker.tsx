@@ -81,7 +81,8 @@ export function VoicePicker({
         )
       .map((v) => ({
         identifier: v.identifier,
-        name: v.name ?? v.identifier,
+        // Prefer the human-readable name; fall back to language tag if name equals identifier or is missing
+        name: (v.name && v.name !== v.identifier) ? v.name : (v.language ?? v.identifier),
         language: v.language ?? "",
         quality:
           v.quality === Speech.VoiceQuality.Enhanced

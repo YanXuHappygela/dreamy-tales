@@ -17,7 +17,7 @@ import { useKeepAwake } from "expo-keep-awake";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { StarfieldBackground } from "@/components/starfield-background";
+
 import { GeneratedStory, SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 
@@ -169,7 +169,6 @@ export default function StoryScreen() {
   if (!story) {
     return (
       <ScreenContainer containerClassName="bg-background">
-        <StarfieldBackground />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingEmoji}>🌙</Text>
           <Text style={styles.loadingText}>Loading your story…</Text>
@@ -191,8 +190,6 @@ export default function StoryScreen() {
 
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
-      <StarfieldBackground />
-
       {/* Top bar */}
       <View style={styles.topBar}>
         <Pressable

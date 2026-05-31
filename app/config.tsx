@@ -16,7 +16,6 @@ import { GeneratedStory, StoryLanguage } from "@/shared/types";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LoadingStory } from "@/components/loading-story";
-import { StarfieldBackground } from "@/components/starfield-background";
 import { VoicePicker } from "@/components/voice-picker";
 
 const PREFS_KEY = "dreamy_tales_prefs";
@@ -129,7 +128,6 @@ export default function ConfigScreen() {
   if (generateMutation.isPending) {
     return (
       <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
-        <StarfieldBackground />
         <LoadingStory />
       </ScreenContainer>
     );

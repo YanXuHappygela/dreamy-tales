@@ -1,14 +1,15 @@
 /** @type {const} */
 const themeColors = {
-  primary: { light: '#0a7ea4', dark: '#0a7ea4' },
-  background: { light: '#ffffff', dark: '#151718' },
-  surface: { light: '#f5f5f5', dark: '#1e2022' },
-  foreground: { light: '#11181C', dark: '#ECEDEE' },
-  muted: { light: '#687076', dark: '#9BA1A6' },
-  border: { light: '#E5E7EB', dark: '#334155' },
-  success: { light: '#22C55E', dark: '#4ADE80' },
-  warning: { light: '#F59E0B', dark: '#FBBF24' },
-  error: { light: '#EF4444', dark: '#F87171' },
+  primary:    { light: '#C8A2E8', dark: '#C8A2E8' },   // soft lavender CTA
+  background: { light: '#0D0B2B', dark: '#0D0B2B' },   // deep midnight navy
+  surface:    { light: '#1A1740', dark: '#1A1740' },   // card/panel background
+  foreground: { light: '#F0EAF8', dark: '#F0EAF8' },   // primary text
+  muted:      { light: '#9B8BB4', dark: '#9B8BB4' },   // secondary text
+  border:     { light: '#2E2A5A', dark: '#2E2A5A' },   // card borders
+  success:    { light: '#7BE8A0', dark: '#7BE8A0' },   // completion
+  warning:    { light: '#FFD580', dark: '#FFD580' },   // moon/star accent
+  error:      { light: '#F87171', dark: '#F87171' },   // errors
+  tint:       { light: '#C8A2E8', dark: '#C8A2E8' },   // tab bar active
 };
 
 module.exports = { themeColors };

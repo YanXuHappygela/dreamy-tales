@@ -11,9 +11,17 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({
+  children,
+  forcedColorScheme,
+}: {
+  children: React.ReactNode;
+  forcedColorScheme?: ColorScheme;
+}) {
   const systemScheme = useSystemColorScheme() ?? "light";
-  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(systemScheme);
+  const [colorScheme, setColorSchemeState] = useState<ColorScheme>(
+    forcedColorScheme ?? systemScheme
+  );
 
   const applyScheme = useCallback((scheme: ColorScheme) => {
     nativewindColorScheme.set(scheme);
@@ -29,14 +37,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const setColorScheme = useCallback((scheme: ColorScheme) => {
-    setColorSchemeState(scheme);
-    applyScheme(scheme);
-  }, [applyScheme]);
+  const setColorScheme = useCallback(
+    (scheme: ColorScheme) => {
+      if (forcedColorScheme) return; // locked
+      setColorSchemeState(scheme);
+      applyScheme(scheme);
+    },
+    [applyScheme, forcedColorScheme]
+  );
 
   useEffect(() => {
-    applyScheme(colorScheme);
-  }, [applyScheme, colorScheme]);
+    applyScheme(forcedColorScheme ?? colorScheme);
+  }, [applyScheme, colorScheme, forcedColorScheme]);
 
   const themeVariables = useMemo(
     () =>
@@ -51,7 +63,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         "color-warning": SchemeColors[colorScheme].warning,
         "color-error": SchemeColors[colorScheme].error,
       }),
-    [colorScheme],
+    [colorScheme]
   );
 
   const value = useMemo(
@@ -59,9 +71,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       colorScheme,
       setColorScheme,
     }),
-    [colorScheme, setColorScheme],
+    [colorScheme, setColorScheme]
   );
-  console.log(value, themeVariables)
 
   return (
     <ThemeContext.Provider value={value}>

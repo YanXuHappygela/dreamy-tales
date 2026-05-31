@@ -30,11 +30,11 @@ const LANGUAGE_CODES: Record<string, string> = {
 
 type PlayState = "idle" | "playing" | "paused" | "done";
 
-type NarrationSpeed = 0.2 | 0.5 | 0.7 | 0.9 | 1.2 | 1.5;
+type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
-const SPEED_OPTIONS: NarrationSpeed[] = [0.2, 0.5, 0.7, 0.9, 1.2, 1.5];
+const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
 
-const DEFAULT_SPEED: NarrationSpeed = 0.9;
+const DEFAULT_SPEED: NarrationSpeed = 1.0;
 
 export default function StoryScreen() {
   useKeepAwake();

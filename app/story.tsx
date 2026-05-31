@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Platform, Alert, Animated,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Alert, Animated,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -13,7 +13,6 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GeneratedStory, SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 
-// Moon yellow palette
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
 
@@ -118,16 +117,18 @@ export default function StoryScreen() {
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
       {/* Top bar */}
       <View style={styles.topBar}>
-        <Pressable style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]} onPress={handleBack}>
+        <TouchableOpacity style={styles.iconBtn} onPress={handleBack} activeOpacity={0.7}>
           <IconSymbol name="chevron.left" size={22} color={Y} />
-        </Pressable>
+        </TouchableOpacity>
         <Text style={styles.topBarTitle} numberOfLines={1}>{story.title}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.iconBtn, isSaved && styles.iconBtnSaved, pressed && { opacity: 0.6 }]}
-          onPress={handleSave} disabled={isSaved}
+        <TouchableOpacity
+          style={[styles.iconBtn, isSaved && styles.iconBtnSaved]}
+          onPress={handleSave}
+          disabled={isSaved}
+          activeOpacity={0.7}
         >
           <IconSymbol name="heart.fill" size={20} color={isSaved ? "#F87171" : "#9B8BB4"} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {/* Story content */}
@@ -159,32 +160,32 @@ export default function StoryScreen() {
           {SPEED_OPTIONS.map((s) => {
             const sel = speed === s;
             return (
-              <Pressable
+              <TouchableOpacity
                 key={s}
-                style={({ pressed }) => [styles.speedChip, sel && styles.speedChipSelected, pressed && { opacity: 0.7 }]}
+                style={[styles.speedChip, sel && styles.speedChipSelected]}
                 onPress={() => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSpeed(s); speedRef.current = s; }}
+                activeOpacity={0.7}
               >
                 <Text style={[styles.speedChipText, sel && styles.speedChipTextSelected]}>{s}×</Text>
-              </Pressable>
+              </TouchableOpacity>
             );
           })}
         </View>
 
         {/* Play / Stop row */}
         <View style={styles.controlRow}>
-          <Pressable
-            style={({ pressed }) => [styles.controlBtn, pressed && { opacity: 0.6 }]}
-            onPress={handleStop} disabled={playState === "idle"}
+          <TouchableOpacity
+            style={[styles.controlBtn, playState === "idle" && styles.controlBtnDisabled]}
+            onPress={handleStop}
+            disabled={playState === "idle"}
+            activeOpacity={0.7}
           >
             <IconSymbol name="stop.fill" size={22} color={playState === "idle" ? "#2E2A5A" : "#9B8BB4"} />
-          </Pressable>
+          </TouchableOpacity>
 
-          <Pressable
-            style={({ pressed }) => [styles.playBtn, pressed && { transform: [{ scale: 0.95 }] }]}
-            onPress={handlePlay}
-          >
+          <TouchableOpacity style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85}>
             <IconSymbol name={playState === "playing" ? "pause.fill" : "play.fill"} size={30} color="#0D0B2B" />
-          </Pressable>
+          </TouchableOpacity>
 
           <View style={styles.statusContainer}>
             <Text style={styles.statusText}>
@@ -224,8 +225,9 @@ const styles = StyleSheet.create({
   speedChipText: { fontSize: 13, fontWeight: "600", color: "#9B8BB4" },
   speedChipTextSelected: { color: Y, fontWeight: "700" },
   controlRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  controlBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: "#2E2A5A", alignItems: "center", justifyContent: "center" },
-  playBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: Y, alignItems: "center", justifyContent: "center", shadowColor: Y, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.6, shadowRadius: 10, elevation: 10 },
+  controlBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center" },
+  controlBtnDisabled: { borderColor: "#2E2A5A" },
+  playBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: Y, alignItems: "center", justifyContent: "center", elevation: 10 },
   statusContainer: { width: 80, alignItems: "flex-end" },
   statusText: { fontSize: 13, color: "#9B8BB4", fontWeight: "500" },
 });

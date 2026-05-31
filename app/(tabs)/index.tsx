@@ -1,11 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -17,8 +12,8 @@ import { StarfieldBackground } from "@/components/starfield-background";
 import { SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 
-const MOON_YELLOW = "#FFD580";
-const MOON_YELLOW_DIM = "#3D3010";
+const Y = "#FFD580";
+const Y_DIM = "#3D3010";
 
 const CHARACTER_EMOJIS: Record<string, string> = {
   Bunny: "🐰", Dragon: "🐉", Princess: "👸",
@@ -37,14 +32,13 @@ export default function HomeScreen() {
     try {
       const raw = await AsyncStorage.getItem(STORIES_STORAGE_KEY);
       if (raw) {
-        const all: SavedStory[] = JSON.parse(raw);
         setRecentStories(
-          all
+          (JSON.parse(raw) as SavedStory[])
             .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
             .slice(0, 3)
         );
       }
-    } catch { /* ignore */ }
+    } catch { /**/ }
   }, []);
 
   useFocusEffect(useCallback(() => { loadRecentStories(); }, [loadRecentStories]));
@@ -82,23 +76,21 @@ export default function HomeScreen() {
         </View>
 
         {/* Create Story Button */}
-        <Pressable
-          style={({ pressed }) => [styles.createButton, pressed && styles.createButtonPressed]}
-          onPress={handleCreateStory}
-        >
+        <TouchableOpacity style={styles.createButton} onPress={handleCreateStory} activeOpacity={0.8}>
           <IconSymbol name="wand.and.stars" size={24} color="#0D0B2B" />
           <Text style={styles.createButtonText}>Create a Story</Text>
-        </Pressable>
+        </TouchableOpacity>
 
         {/* Recent Stories */}
         {recentStories.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recent Stories</Text>
             {recentStories.map((story) => (
-              <Pressable
+              <TouchableOpacity
                 key={story.id}
-                style={({ pressed }) => [styles.storyCard, pressed && styles.storyCardPressed]}
+                style={styles.storyCard}
                 onPress={() => handleOpenStory(story)}
+                activeOpacity={0.75}
               >
                 <View style={styles.storyCardLeft}>
                   <Text style={styles.storyCardEmoji}>
@@ -113,7 +105,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
                 <IconSymbol name="chevron.right" size={18} color="#9B8BB4" />
-              </Pressable>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -146,25 +138,17 @@ const styles = StyleSheet.create({
   appSubtitle: { fontSize: 16, color: "#9B8BB4", textAlign: "center", lineHeight: 22 },
   createButton: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    backgroundColor: MOON_YELLOW,
-    borderRadius: 20, paddingVertical: 18, paddingHorizontal: 32, marginBottom: 36,
-    shadowColor: MOON_YELLOW, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
+    backgroundColor: Y, borderRadius: 20, paddingVertical: 18, paddingHorizontal: 32,
+    marginBottom: 36, elevation: 8,
   },
-  createButtonPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
   createButtonText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: "#F0EAF8", marginBottom: 14 },
   storyCard: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: "#1A1740", borderRadius: 16, padding: 16, marginBottom: 10,
-    borderWidth: 1.5, borderColor: MOON_YELLOW,
+    flexDirection: "row", alignItems: "center", backgroundColor: "#1A1740",
+    borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1.5, borderColor: Y,
   },
-  storyCardPressed: { opacity: 0.75 },
-  storyCardLeft: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: MOON_YELLOW_DIM, alignItems: "center", justifyContent: "center", marginRight: 12,
-  },
+  storyCardLeft: { width: 44, height: 44, borderRadius: 12, backgroundColor: Y_DIM, alignItems: "center", justifyContent: "center", marginRight: 12 },
   storyCardEmoji: { fontSize: 22 },
   storyCardContent: { flex: 1 },
   storyCardTitle: { fontSize: 15, fontWeight: "600", color: "#F0EAF8", marginBottom: 4 },

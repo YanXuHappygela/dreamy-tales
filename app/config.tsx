@@ -1,7 +1,9 @@
 import React, { useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, Pressable, TextInput, StyleSheet, Platform,
+  View, Text, ScrollView, TouchableOpacity, TextInput,
+  StyleSheet, Platform,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
@@ -14,10 +16,8 @@ import { VoicePicker } from "@/components/voice-picker";
 
 const PREFS_KEY = "dreamy_tales_prefs";
 
-// Moon yellow palette
-const Y = "#FFD580";       // moon yellow — primary accent
-const Y_DIM = "#3D3010";   // dark tinted yellow — selected chip bg
-const Y_BORDER = "#FFD580"; // yellow border for selected state
+const Y = "#FFD580";
+const Y_DIM = "#3D3010";
 
 const CHARACTER_OPTIONS = [
   { label: "Bunny", emoji: "🐰" }, { label: "Dragon", emoji: "🐉" },
@@ -63,7 +63,7 @@ export default function ConfigScreen() {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     generateMutation.mutate({
       childName: childName.trim() || "the little one",
-      characterType: characterType as any,
+      characterType,
       customCharacter: characterType === "Custom" ? customCharacter.trim() : undefined,
       scenario: scenario as any,
       style: storyStyle as any,
@@ -80,7 +80,9 @@ export default function ConfigScreen() {
     setVoiceId(undefined);
   }, []);
 
-  const tap = () => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); };
+  const tap = () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   if (generateMutation.isPending) {
     return (
@@ -100,9 +102,9 @@ export default function ConfigScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Pressable style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
             <IconSymbol name="chevron.left" size={22} color={Y} />
-          </Pressable>
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Create a Story</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -128,14 +130,15 @@ export default function ConfigScreen() {
             {CHARACTER_OPTIONS.map((opt) => {
               const sel = characterType === opt.label;
               return (
-                <Pressable
+                <TouchableOpacity
                   key={opt.label}
-                  style={({ pressed }) => [styles.chip, sel && styles.chipSelected, pressed && { opacity: 0.7 }]}
+                  style={[styles.chip, sel && styles.chipSelected]}
                   onPress={() => { tap(); setCharacterType(opt.label); }}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.chipEmoji}>{opt.emoji}</Text>
                   <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
-                </Pressable>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -160,14 +163,15 @@ export default function ConfigScreen() {
             {SCENARIO_OPTIONS.map((opt) => {
               const sel = scenario === opt.label;
               return (
-                <Pressable
+                <TouchableOpacity
                   key={opt.label}
-                  style={({ pressed }) => [styles.chip, sel && styles.chipSelected, pressed && { opacity: 0.7 }]}
+                  style={[styles.chip, sel && styles.chipSelected]}
                   onPress={() => { tap(); setScenario(opt.label); }}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.chipEmoji}>{opt.emoji}</Text>
                   <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
-                </Pressable>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -180,14 +184,15 @@ export default function ConfigScreen() {
             {STYLE_OPTIONS.map((opt) => {
               const sel = storyStyle === opt.label;
               return (
-                <Pressable
+                <TouchableOpacity
                   key={opt.label}
-                  style={({ pressed }) => [styles.chip, sel && styles.chipSelected, pressed && { opacity: 0.7 }]}
+                  style={[styles.chip, sel && styles.chipSelected]}
                   onPress={() => { tap(); setStoryStyle(opt.label); }}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.chipEmoji}>{opt.emoji}</Text>
                   <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
-                </Pressable>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -213,31 +218,26 @@ export default function ConfigScreen() {
           <Text style={styles.charCount}>{storyIdea.length}/300</Text>
         </View>
 
-        {/* Story Length */}
+        {/* Story Length — Dropdown */}
         <View style={styles.section}>
-          <View style={styles.lengthHeader}>
-            <Text style={styles.sectionLabel}>Story Length</Text>
-            <View style={styles.lengthBadge}>
-              <Text style={styles.lengthBadgeText}>{lengthMinutes} min</Text>
-            </View>
-          </View>
-          <View style={styles.lengthRow}>
-            {LENGTH_OPTIONS.map((min) => {
-              const sel = lengthMinutes === min;
-              return (
-                <Pressable
+          <Text style={styles.sectionLabel}>Story Length</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={lengthMinutes}
+              onValueChange={(val) => { tap(); setLengthMinutes(val as number); }}
+              style={styles.picker}
+              dropdownIconColor={Y}
+              itemStyle={styles.pickerItem}
+            >
+              {LENGTH_OPTIONS.map((min) => (
+                <Picker.Item
                   key={min}
-                  style={({ pressed }) => [styles.lengthDot, sel && styles.lengthDotSelected, pressed && { opacity: 0.7 }]}
-                  onPress={() => { tap(); setLengthMinutes(min); }}
-                >
-                  <Text style={[styles.lengthDotLabel, sel && styles.lengthDotLabelSelected]}>{min}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={styles.lengthRange}>
-            <Text style={styles.lengthRangeLabel}>3 min</Text>
-            <Text style={styles.lengthRangeLabel}>10 min</Text>
+                  label={`${min} minutes`}
+                  value={min}
+                  color={Platform.OS === "ios" ? "#F0EAF8" : "#F0EAF8"}
+                />
+              ))}
+            </Picker>
           </View>
         </View>
 
@@ -248,13 +248,14 @@ export default function ConfigScreen() {
             {LANGUAGE_OPTIONS.map((opt) => {
               const sel = language === opt.label;
               return (
-                <Pressable
+                <TouchableOpacity
                   key={opt.label}
-                  style={({ pressed }) => [styles.languageChip, sel && styles.languageChipSelected, pressed && { opacity: 0.7 }]}
+                  style={[styles.languageChip, sel && styles.languageChipSelected]}
                   onPress={() => handleLanguageChange(opt.label)}
+                  activeOpacity={0.7}
                 >
                   <Text style={[styles.languageLabel, sel && styles.languageLabelSelected]}>{opt.label}</Text>
-                </Pressable>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -267,14 +268,15 @@ export default function ConfigScreen() {
           <VoicePicker language={language} selectedVoiceId={voiceId} onVoiceSelect={setVoiceId} />
         </View>
 
-        {/* Generate */}
-        <Pressable
-          style={({ pressed }) => [styles.generateBtn, pressed && styles.generateBtnPressed]}
+        {/* Generate Button */}
+        <TouchableOpacity
+          style={styles.generateBtn}
           onPress={handleGenerate}
+          activeOpacity={0.8}
         >
           <IconSymbol name="wand.and.stars" size={22} color="#0D0B2B" />
           <Text style={styles.generateBtnText}>Generate Story</Text>
-        </Pressable>
+        </TouchableOpacity>
 
         {generateMutation.isError && (
           <Text style={styles.errorText}>Something went wrong. Please try again.</Text>
@@ -297,31 +299,26 @@ const styles = StyleSheet.create({
   customCharInput: { marginTop: 10, borderColor: Y },
   optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 14, paddingVertical: 10, minWidth: 90 },
-  chipSelected: { borderColor: Y_BORDER, backgroundColor: Y_DIM },
+  chipSelected: { borderColor: Y, backgroundColor: Y_DIM },
   chipEmoji: { fontSize: 18 },
   chipLabel: { fontSize: 14, fontWeight: "500", color: "#9B8BB4" },
   chipLabelSelected: { color: Y, fontWeight: "700" },
   storyIdeaInput: { minHeight: 90, textAlignVertical: "top", paddingTop: 14 },
   optionalTag: { fontSize: 12, fontWeight: "400", color: "#4A4270", textTransform: "none", letterSpacing: 0 },
   charCount: { fontSize: 12, color: "#4A4270", textAlign: "right", marginTop: 6 },
-  lengthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-  lengthBadge: { backgroundColor: Y_DIM, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, borderWidth: 1.5, borderColor: Y },
-  lengthBadgeText: { fontSize: 14, fontWeight: "700", color: Y },
-  lengthRow: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
-  lengthDot: { flex: 1, aspectRatio: 1, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: "#2E2A5A", alignItems: "center", justifyContent: "center", minHeight: 44 },
-  lengthDotSelected: { backgroundColor: Y, borderColor: Y },
-  lengthDotLabel: { fontSize: 14, fontWeight: "600", color: "#9B8BB4" },
-  lengthDotLabelSelected: { color: "#0D0B2B", fontWeight: "800" },
-  lengthRange: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
-  lengthRangeLabel: { fontSize: 12, color: "#4A4270" },
+  // Dropdown picker
+  pickerWrapper: { backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: Y, overflow: "hidden" },
+  picker: { color: "#F0EAF8", height: Platform.OS === "ios" ? 150 : 52, backgroundColor: "transparent" },
+  pickerItem: { color: "#F0EAF8", fontSize: 16, backgroundColor: "#1A1740" },
+  // Language
   languageRow: { flexDirection: "row", gap: 10 },
   languageChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 16, borderWidth: 1.5, borderColor: "#2E2A5A", paddingVertical: 14, paddingHorizontal: 8 },
   languageChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
   languageLabel: { fontSize: 13, fontWeight: "600", color: "#9B8BB4", textAlign: "center" },
   languageLabelSelected: { color: Y },
   voiceHint: { fontSize: 12, color: "#4A4270", marginBottom: 10, fontStyle: "italic" },
-  generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginTop: 8, shadowColor: Y, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 8 },
-  generateBtnPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
+  // Generate button
+  generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginTop: 8, elevation: 8 },
   generateBtnText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
   errorText: { color: "#F87171", textAlign: "center", marginTop: 12, fontSize: 14 },
 });

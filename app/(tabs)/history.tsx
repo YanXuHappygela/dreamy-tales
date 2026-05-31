@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
-  View, Text, FlatList, Pressable, StyleSheet, Alert, Platform,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Platform,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -75,12 +75,9 @@ export default function HistoryScreen() {
           <Text style={styles.emptyEmoji}>📚</Text>
           <Text style={styles.emptyTitle}>No stories saved yet</Text>
           <Text style={styles.emptySubtitle}>Generate a story and tap the heart to save it here.</Text>
-          <Pressable
-            style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.8 }]}
-            onPress={() => router.push("/config" as any)}
-          >
+          <TouchableOpacity style={styles.createBtn} onPress={() => router.push("/config" as any)} activeOpacity={0.8}>
             <Text style={styles.createBtnText}>Create a Story</Text>
-          </Pressable>
+          </TouchableOpacity>
         </View>
       </ScreenContainer>
     );
@@ -98,10 +95,7 @@ export default function HistoryScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-            onPress={() => handleOpen(item)}
-          >
+          <TouchableOpacity style={styles.card} onPress={() => handleOpen(item)} activeOpacity={0.75}>
             <View style={styles.cardLeft}>
               <Text style={styles.cardEmoji}>{CHARACTER_EMOJIS[item.config.characterType] || "📖"}</Text>
             </View>
@@ -110,14 +104,15 @@ export default function HistoryScreen() {
               <Text style={styles.cardMeta}>{STYLE_EMOJIS[item.config.style] || "✨"} {item.config.style} • {item.config.scenario} • {item.config.lengthMinutes} min</Text>
               <Text style={styles.cardDate}>{formatDate(item.savedAt)}</Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.5 }]}
+            <TouchableOpacity
+              style={styles.deleteBtn}
               onPress={() => handleDelete(item)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.5}
             >
               <IconSymbol name="trash.fill" size={16} color="#9B8BB4" />
-            </Pressable>
-          </Pressable>
+            </TouchableOpacity>
+          </TouchableOpacity>
         )}
       />
     </ScreenContainer>
@@ -130,7 +125,6 @@ const styles = StyleSheet.create({
   headerCount: { fontSize: 14, color: "#9B8BB4", fontWeight: "500" },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   card: { flexDirection: "row", alignItems: "center", backgroundColor: "#1A1740", borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: Y },
-  cardPressed: { opacity: 0.75 },
   cardLeft: { width: 52, height: 52, borderRadius: 14, backgroundColor: Y_DIM, alignItems: "center", justifyContent: "center", marginRight: 14 },
   cardEmoji: { fontSize: 26 },
   cardContent: { flex: 1 },
@@ -142,6 +136,6 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 64, marginBottom: 20 },
   emptyTitle: { fontSize: 22, fontWeight: "700", color: "#F0EAF8", marginBottom: 10 },
   emptySubtitle: { fontSize: 15, color: "#9B8BB4", textAlign: "center", lineHeight: 22, marginBottom: 32 },
-  createBtn: { backgroundColor: Y, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 28 },
+  createBtn: { backgroundColor: Y, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 28, elevation: 6 },
   createBtnText: { fontSize: 16, fontWeight: "700", color: "#0D0B2B" },
 });

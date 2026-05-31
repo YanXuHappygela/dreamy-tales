@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
-  View, Text, Pressable, StyleSheet, ActivityIndicator, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform,
 } from "react-native";
 import * as Speech from "expo-speech";
 import * as Haptics from "expo-haptics";
@@ -95,11 +95,6 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
     });
   }, [language]);
 
-  const handleSelect = useCallback((voice: VoiceOption) => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onVoiceSelect(voice.identifier);
-  }, [onVoiceSelect]);
-
   if (loading) {
     return (
       <View style={styles.loadingRow}>
@@ -121,10 +116,11 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
         const isSelected = selectedVoiceId === voice.identifier;
         const isPreviewing = previewingId === voice.identifier;
         return (
-          <Pressable
+          <TouchableOpacity
             key={`${voice.identifier}-${index}`}
-            style={({ pressed }) => [styles.voiceRow, isSelected && styles.voiceRowSelected, pressed && { opacity: 0.75 }]}
-            onPress={() => handleSelect(voice)}
+            style={[styles.voiceRow, isSelected && styles.voiceRowSelected]}
+            onPress={() => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onVoiceSelect(voice.identifier); }}
+            activeOpacity={0.75}
           >
             <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
               {isSelected && <View style={styles.radioInner} />}
@@ -138,14 +134,15 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
               </View>
               <Text style={styles.voiceLang}>{voice.language}</Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [styles.previewBtn, isPreviewing && styles.previewBtnActive, pressed && { opacity: 0.6 }]}
+            <TouchableOpacity
+              style={[styles.previewBtn, isPreviewing && styles.previewBtnActive]}
               onPress={() => handlePreview(voice)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
             >
               <Text style={[styles.previewIcon, isPreviewing && styles.previewIconActive]}>{isPreviewing ? "■" : "▶"}</Text>
-            </Pressable>
-          </Pressable>
+            </TouchableOpacity>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -170,8 +167,8 @@ const styles = StyleSheet.create({
   qualityBadge: { backgroundColor: Y_DIM, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1, flexShrink: 0 },
   qualityBadgeText: { fontSize: 10, fontWeight: "700", color: Y, letterSpacing: 0.5 },
   voiceLang: { fontSize: 12, color: "#4A4270" },
-  previewBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Y, alignItems: "center", justifyContent: "center", flexShrink: 0, shadowColor: Y, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.45, shadowRadius: 6, elevation: 4 },
-  previewBtnActive: { backgroundColor: "#F87171", shadowColor: "#F87171" },
+  previewBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Y, alignItems: "center", justifyContent: "center", flexShrink: 0, elevation: 4 },
+  previewBtnActive: { backgroundColor: "#F87171" },
   previewIcon: { fontSize: 14, color: "#0D0B2B", fontWeight: "700" },
   previewIconActive: { color: "#FFFFFF" },
 });

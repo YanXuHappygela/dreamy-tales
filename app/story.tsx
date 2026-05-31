@@ -36,6 +36,8 @@ export default function StoryScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
   const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
+  const playStateRef = useRef<PlayState>("idle");
+  const currentParagraphRef = useRef(0);
   const scrollRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -52,8 +54,9 @@ export default function StoryScreen() {
 
   const speakParagraph = useCallback(
     (index: number, paragraphs: string[], config: GeneratedStory["config"]) => {
-      if (index >= paragraphs.length) { setPlayState("done"); setCurrentParagraph(0); return; }
+      if (index >= paragraphs.length) { setPlayState("done"); setCurrentParagraph(0); currentParagraphRef.current = 0; return; }
       setCurrentParagraph(index);
+      currentParagraphRef.current = index;
       Speech.speak(paragraphs[index], {
         rate: speedRef.current,
         pitch: 1.05,
@@ -69,20 +72,23 @@ export default function StoryScreen() {
   const handlePlay = async () => {
     if (!story) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (playState === "paused" && Platform.OS !== "android") { await Speech.resume(); setPlayState("playing"); return; }
+    if (playState === "paused" && Platform.OS !== "android") { await Speech.resume(); setPlayState("playing"); playStateRef.current = "playing"; return; }
     if (playState === "playing") {
-      if (Platform.OS !== "android") { await Speech.pause(); setPlayState("paused"); }
-      else { await Speech.stop(); setPlayState("idle"); }
+      if (Platform.OS !== "android") { await Speech.pause(); setPlayState("paused"); playStateRef.current = "paused"; }
+      else { await Speech.stop(); setPlayState("idle"); playStateRef.current = "idle"; }
       return;
     }
-    setPlayState("playing"); setCurrentParagraph(0);
+    setPlayState("playing"); setCurrentParagraph(0); currentParagraphRef.current = 0;
     speedRef.current = speed;
+    playStateRef.current = "playing";
     speakParagraph(0, story.paragraphs, story.config);
   };
 
   const handleStop = async () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await Speech.stop(); setPlayState("idle"); setCurrentParagraph(0);
+    await Speech.stop();
+    setPlayState("idle"); playStateRef.current = "idle";
+    setCurrentParagraph(0); currentParagraphRef.current = 0;
   };
 
   const handleSave = async () => {
@@ -163,7 +169,16 @@ export default function StoryScreen() {
               <TouchableOpacity
                 key={s}
                 style={[styles.speedChip, sel && styles.speedChipSelected]}
-                onPress={() => { if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSpeed(s); speedRef.current = s; }}
+                onPress={async () => {
+                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSpeed(s);
+                speedRef.current = s;
+                // If currently playing, restart the current paragraph at the new speed
+                if (playStateRef.current === "playing" && story) {
+                  await Speech.stop();
+                  speakParagraph(currentParagraphRef.current, story.paragraphs, story.config);
+                }
+              }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.speedChipText, sel && styles.speedChipTextSelected]}>{s}×</Text>

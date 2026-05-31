@@ -16,6 +16,7 @@ const Y_DIM = "#3D3010";
 
 const CHARACTER_EMOJIS: Record<string, string> = {
   Bunny: "🐰", Dragon: "🐉", Princess: "👸", Robot: "🤖", Unicorn: "🦄", Bear: "🐻",
+  "Race Car": "🏎️", Dolphin: "🐬",
 };
 const STYLE_EMOJIS: Record<string, string> = {
   Funny: "😄", Magical: "✨", Adventurous: "🗺️", Cozy: "🛋️", Mysterious: "🔮",

@@ -23,6 +23,7 @@ const CHARACTER_OPTIONS = [
   { label: "Bunny", emoji: "🐰" }, { label: "Dragon", emoji: "🐉" },
   { label: "Princess", emoji: "👸" }, { label: "Robot", emoji: "🤖" },
   { label: "Unicorn", emoji: "🦄" }, { label: "Bear", emoji: "🐻" },
+  { label: "Race Car", emoji: "🏎️" }, { label: "Dolphin", emoji: "🐬" },
   { label: "Custom", emoji: "✏️" },
 ];
 const SCENARIO_OPTIONS = [

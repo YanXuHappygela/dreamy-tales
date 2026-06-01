@@ -139,7 +139,7 @@ export const appRouter = router({
             {
               role: "system",
               content:
-                "You are a gentle children's story author. Always respond with valid JSON only, no markdown fences.",
+                "You are a gentle children's story author. You MUST respond with ONLY a raw JSON object — no markdown fences, no backticks, no explanatory text before or after. The response must start with { and end with }.",
             },
             { role: "user", content: prompt },
           ],
@@ -154,7 +154,21 @@ export const appRouter = router({
 
         let parsed: { title?: string; paragraphs?: string[] };
         try {
-          parsed = JSON.parse(raw);
+          // 1. Strip markdown code fences if present
+          let jsonStr = raw.trim();
+          const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+          // 2. Extract the first {...} block in case the model added surrounding text
+          if (!jsonStr.startsWith("{")) {
+            const braceStart = jsonStr.indexOf("{");
+            const braceEnd = jsonStr.lastIndexOf("}");
+            if (braceStart !== -1 && braceEnd > braceStart) {
+              jsonStr = jsonStr.slice(braceStart, braceEnd + 1);
+            }
+          }
+
+          parsed = JSON.parse(jsonStr);
         } catch {
           parsed = { title: "A Dreamy Tale", paragraphs: [raw] };
         }

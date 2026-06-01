@@ -18,7 +18,6 @@ import { trpc } from "@/lib/trpc";
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
 
-// BCP-47 fallback codes
 const LANGUAGE_CODES: Record<string, string> = {
   English: "en-US", Mandarin: "zh-CN", Spanish: "es-ES",
 };
@@ -38,14 +37,24 @@ export default function StoryScreen() {
   const [currentParagraph, setCurrentParagraph] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
+
+  // Refs that are safe to read inside async callbacks
   const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
-  const playStateRef = useRef<PlayState>("idle");
   const currentParagraphRef = useRef(0);
   const audioPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /**
+   * Generation counter — incremented every time we start or stop narration.
+   * Each speakParagraph call captures the generation at the time it was launched.
+   * If the generation changes before the async work completes, the call is stale
+   * and must not proceed. This prevents multiple concurrent chains.
+   */
+  const generationRef = useRef(0);
+
   const scrollRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // tRPC mutation for TTS synthesis
   const synthesizeMutation = trpc.tts.synthesize.useMutation();
 
   useEffect(() => {
@@ -57,33 +66,49 @@ export default function StoryScreen() {
       } catch { /**/ }
     }
     return () => {
-      audioPlayerRef.current?.remove();
-      audioPlayerRef.current = null;
+      stopAll();
     };
-  }, [params.storyData, fadeAnim]);
+  }, [params.storyData, fadeAnim]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stopAudio = useCallback(() => {
-    audioPlayerRef.current?.remove();
-    audioPlayerRef.current = null;
+  /** Stop audio, clear poll, and bump the generation so any in-flight chain aborts. */
+  const stopAll = useCallback(() => {
+    generationRef.current += 1;
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (audioPlayerRef.current) {
+      try { audioPlayerRef.current.remove(); } catch { /**/ }
+      audioPlayerRef.current = null;
+    }
   }, []);
 
   const speakParagraph = useCallback(
-    async (index: number, paragraphs: string[], config: GeneratedStory["config"]) => {
-      if (playStateRef.current === "idle" || playStateRef.current === "done") return;
+    async (
+      index: number,
+      paragraphs: string[],
+      config: GeneratedStory["config"],
+      generation: number   // captured at chain-start; stale if !== generationRef.current
+    ) => {
+      // Abort if this chain has been superseded
+      if (generation !== generationRef.current) return;
+
       if (index >= paragraphs.length) {
-        setPlayState("done"); playStateRef.current = "done";
-        setCurrentParagraph(0); currentParagraphRef.current = 0;
+        setPlayState("done");
+        setCurrentParagraph(0);
+        currentParagraphRef.current = 0;
         return;
       }
 
       setCurrentParagraph(index);
       currentParagraphRef.current = index;
-      setPlayState("loading"); playStateRef.current = "loading";
+      setPlayState("loading");
 
-      const langCode = config.voiceLanguageCode
-        ?? LANGUAGE_CODES[config.language ?? "English"]
-        ?? "en-US";
-      const voiceId = config.voiceId ?? "en-US-Neural2-C";
+      const langCode =
+        config.voiceLanguageCode ??
+        LANGUAGE_CODES[config.language ?? "English"] ??
+        "en-US";
+      const voiceId = config.voiceId ?? "en-US-Wavenet-C";
 
       try {
         const result = await synthesizeMutation.mutateAsync({
@@ -93,13 +118,21 @@ export default function StoryScreen() {
           speakingRate: speedRef.current,
         });
 
-        // If stopped while synthesizing, bail out
-        const stateAfterSynth = playStateRef.current as string;
-        if (stateAfterSynth === "idle" || stateAfterSynth === "done") return;
+        // Check again — user may have stopped while we were synthesizing
+        if (generation !== generationRef.current) return;
 
         await setAudioModeAsync({ playsInSilentMode: true });
 
-        stopAudio();
+        // Remove any leftover player
+        if (audioPlayerRef.current) {
+          try { audioPlayerRef.current.remove(); } catch { /**/ }
+          audioPlayerRef.current = null;
+        }
+        // Clear any leftover poll
+        if (pollRef.current !== null) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
 
         const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
         const audioUrl = result.url.startsWith("http")
@@ -109,31 +142,42 @@ export default function StoryScreen() {
         const player = createAudioPlayer({ uri: audioUrl });
         audioPlayerRef.current = player;
 
-        setPlayState("playing"); playStateRef.current = "playing";
+        setPlayState("playing");
         player.play();
 
-        // Poll for completion
-        const poll = setInterval(() => {
-          const pollState = playStateRef.current as string;
-          if (pollState === "idle" || pollState === "done") {
-            clearInterval(poll);
+        // Poll for completion — use the captured generation so the callback
+        // can detect staleness without closing over mutable state
+        const capturedGen = generation;
+        pollRef.current = setInterval(() => {
+          if (capturedGen !== generationRef.current) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            return;
+          }
+          // player.playing can briefly be false between buffering ticks on Android;
+          // also check that the player object hasn't been replaced
+          if (audioPlayerRef.current !== player) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
             return;
           }
           if (!player.playing) {
-            clearInterval(poll);
-            player.remove();
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            try { player.remove(); } catch { /**/ }
             if (audioPlayerRef.current === player) audioPlayerRef.current = null;
-            speakParagraph(index + 1, paragraphs, config);
+            // Advance to next paragraph in the same generation
+            speakParagraph(index + 1, paragraphs, config, capturedGen);
           }
-        }, 300);
+        }, 400);
+
       } catch {
-        const catchState = playStateRef.current as string;
-        if (catchState !== "idle") {
-          setPlayState("idle"); playStateRef.current = "idle";
+        if (generation === generationRef.current) {
+          setPlayState("idle");
         }
       }
     },
-    [synthesizeMutation, stopAudio]
+    [synthesizeMutation] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const handlePlay = async () => {
@@ -141,31 +185,37 @@ export default function StoryScreen() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (playState === "playing" || playState === "loading") {
-      stopAudio();
-      setPlayState("idle"); playStateRef.current = "idle";
+      // Pause: stop audio but remember position
+      stopAll();
+      setPlayState("paused");
       return;
     }
 
     if (playState === "paused") {
       // Resume from current paragraph
-      setPlayState("loading"); playStateRef.current = "loading";
-      speakParagraph(currentParagraphRef.current, story.paragraphs, story.config);
+      const gen = generationRef.current; // stopAll already bumped; we use current
+      speedRef.current = speed;
+      setPlayState("loading");
+      speakParagraph(currentParagraphRef.current, story.paragraphs, story.config, gen);
       return;
     }
 
     // idle or done — start from beginning
-    setCurrentParagraph(0); currentParagraphRef.current = 0;
+    stopAll();
+    const gen = generationRef.current;
+    setCurrentParagraph(0);
+    currentParagraphRef.current = 0;
     speedRef.current = speed;
-    playStateRef.current = "loading";
     setPlayState("loading");
-    speakParagraph(0, story.paragraphs, story.config);
+    speakParagraph(0, story.paragraphs, story.config, gen);
   };
 
   const handleStop = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    stopAudio();
-    setPlayState("idle"); playStateRef.current = "idle";
-    setCurrentParagraph(0); currentParagraphRef.current = 0;
+    stopAll();
+    setPlayState("idle");
+    setCurrentParagraph(0);
+    currentParagraphRef.current = 0;
   };
 
   const handleSave = async () => {
@@ -175,7 +225,10 @@ export default function StoryScreen() {
       const raw = await AsyncStorage.getItem(STORIES_STORAGE_KEY);
       const existing: SavedStory[] = raw ? JSON.parse(raw) : [];
       const saved: SavedStory = { ...story, savedAt: new Date().toISOString() };
-      await AsyncStorage.setItem(STORIES_STORAGE_KEY, JSON.stringify([saved, ...existing.filter((s) => s.id !== story.id)]));
+      await AsyncStorage.setItem(
+        STORIES_STORAGE_KEY,
+        JSON.stringify([saved, ...existing.filter((s) => s.id !== story.id)])
+      );
       setIsSaved(true);
     } catch { Alert.alert("Error", "Could not save the story. Please try again."); }
   };
@@ -188,8 +241,24 @@ export default function StoryScreen() {
   };
 
   const handleBack = () => {
-    stopAudio();
+    stopAll();
     router.back();
+  };
+
+  const handleSpeedChange = async (s: NarrationSpeed) => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSpeed(s);
+    speedRef.current = s;
+    // If currently playing/loading, restart the current paragraph at the new speed
+    if ((playState === "playing" || playState === "loading") && story) {
+      const para = currentParagraphRef.current;
+      stopAll();
+      const gen = generationRef.current;
+      setCurrentParagraph(para);
+      currentParagraphRef.current = para;
+      setPlayState("loading");
+      speakParagraph(para, story.paragraphs, story.config, gen);
+    }
   };
 
   if (!story) {
@@ -204,10 +273,15 @@ export default function StoryScreen() {
   }
 
   const totalParagraphs = story.paragraphs.length;
-  const progress = playState === "done" ? 1 : totalParagraphs > 0 ? currentParagraph / totalParagraphs : 0;
+  const progress =
+    playState === "done"
+      ? 1
+      : totalParagraphs > 0
+      ? currentParagraph / totalParagraphs
+      : 0;
 
-  const isPlaying = playState === "playing" || playState === "loading";
-  const playIcon = isPlaying ? "pause.fill" : "play.fill";
+  const isActive = playState === "playing" || playState === "loading";
+  const playIcon = isActive ? "pause.fill" : "play.fill";
 
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
@@ -230,14 +304,29 @@ export default function StoryScreen() {
 
       {/* Story content */}
       <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
-        <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.storyTitle}>{story.title}</Text>
           <View style={styles.metaRow}>
-            <Text style={styles.metaText}>{story.config.characterType} • {story.config.scenario} • {story.config.style}</Text>
-            <Text style={styles.metaText}>🌐 {story.config.language ?? "English"} • 🕐 ~{story.config.lengthMinutes} min</Text>
+            <Text style={styles.metaText}>
+              {story.config.characterType} • {story.config.scenario} • {story.config.style}
+            </Text>
+            <Text style={styles.metaText}>
+              🌐 {story.config.language ?? "English"} • 🕐 ~{story.config.lengthMinutes} min
+            </Text>
           </View>
           {story.paragraphs.map((para, idx) => (
-            <Text key={idx} style={[styles.paragraph, idx === currentParagraph && isPlaying && styles.paragraphActive]}>
+            <Text
+              key={idx}
+              style={[
+                styles.paragraph,
+                idx === currentParagraph && isActive && styles.paragraphActive,
+              ]}
+            >
               {para}
             </Text>
           ))}
@@ -247,6 +336,7 @@ export default function StoryScreen() {
 
       {/* Controls */}
       <View style={styles.controls}>
+        {/* Progress bar */}
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
         </View>
@@ -259,21 +349,12 @@ export default function StoryScreen() {
               <TouchableOpacity
                 key={s}
                 style={[styles.speedChip, sel && styles.speedChipSelected]}
-                onPress={async () => {
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSpeed(s);
-                  speedRef.current = s;
-                  // Restart current paragraph at new speed if playing
-                  if ((playStateRef.current === "playing" || playStateRef.current === "loading") && story) {
-                    stopAudio();
-                    playStateRef.current = "loading";
-                    setPlayState("loading");
-                    speakParagraph(currentParagraphRef.current, story.paragraphs, story.config);
-                  }
-                }}
+                onPress={() => handleSpeedChange(s)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.speedChipText, sel && styles.speedChipTextSelected]}>{s}×</Text>
+                <Text style={[styles.speedChipText, sel && styles.speedChipTextSelected]}>
+                  {s}×
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -283,9 +364,15 @@ export default function StoryScreen() {
         <View style={styles.controlRow}>
           <TouchableOpacity
             style={[styles.controlBtn, playState === "idle" && styles.controlBtnDisabled]}
-            onPress={handleStop} disabled={playState === "idle"} activeOpacity={0.7}
+            onPress={handleStop}
+            disabled={playState === "idle"}
+            activeOpacity={0.7}
           >
-            <IconSymbol name="stop.fill" size={22} color={playState === "idle" ? "#2E2A5A" : "#9B8BB4"} />
+            <IconSymbol
+              name="stop.fill"
+              size={22}
+              color={playState === "idle" ? "#2E2A5A" : "#9B8BB4"}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85}>
@@ -314,7 +401,12 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0D0B2B" },
   loadingEmoji: { fontSize: 56, marginBottom: 16 },
   loadingText: { fontSize: 18, color: "#9B8BB4" },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: Platform.OS === "android" ? 48 : 56, paddingBottom: 12, backgroundColor: "#0D0B2B" },
+  topBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "android" ? 48 : 56,
+    paddingBottom: 12, backgroundColor: "#0D0B2B",
+  },
   topBarTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#F0EAF8", textAlign: "center", marginHorizontal: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center" },
   iconBtnSaved: { backgroundColor: Y_DIM, borderColor: "#F87171" },
@@ -325,7 +417,11 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 13, color: "#9B8BB4" },
   paragraph: { fontSize: 18, lineHeight: 30, color: "#C8BEDC", marginBottom: 20, letterSpacing: 0.2 },
   paragraphActive: { color: "#F0EAF8", backgroundColor: Y_DIM, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginHorizontal: -8 },
-  controls: { backgroundColor: "#120F35", borderTopWidth: 1.5, borderTopColor: Y, paddingHorizontal: 24, paddingTop: 12, paddingBottom: Platform.OS === "android" ? 24 : 32 },
+  controls: {
+    backgroundColor: "#120F35", borderTopWidth: 1.5, borderTopColor: Y,
+    paddingHorizontal: 24, paddingTop: 12,
+    paddingBottom: Platform.OS === "android" ? 24 : 32,
+  },
   progressBar: { height: 4, backgroundColor: "#2E2A5A", borderRadius: 2, marginBottom: 14, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: Y, borderRadius: 2 },
   speedRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginBottom: 14 },

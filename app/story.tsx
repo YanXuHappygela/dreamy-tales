@@ -68,12 +68,14 @@ export default function StoryScreen() {
   /** Atomically stop everything and invalidate any in-flight chain. */
   const stopAll = useCallback(() => {
     generationRef.current += 1;
-    // Remove event listener before removing player
+    // Remove event listener first
     if (listenerRef.current) {
       try { listenerRef.current.remove(); } catch { /**/ }
       listenerRef.current = null;
     }
+    // Pause then remove the audio player so audio stops immediately
     if (audioPlayerRef.current) {
+      try { audioPlayerRef.current.pause(); } catch { /**/ }
       try { audioPlayerRef.current.remove(); } catch { /**/ }
       audioPlayerRef.current = null;
     }

@@ -6,6 +6,8 @@ import { publicProcedure, router } from "./_core/trpc.js";
 import { invokeLLM } from "./_core/llm.js";
 import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
+import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
+import { storagePut } from "./storage.js";
 
 // Approximate words per minute for a calm, soothing read-aloud voice
 const WORDS_PER_MINUTE = 132;
@@ -20,15 +22,21 @@ const AGE_INSTRUCTIONS: Record<string, string> = {
 const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   English: "Write the story entirely in English.",
   Mandarin:
-    "Write the story entirely in Simplified Chinese (Mandarin). Use simple vocabulary appropriate for young children aged 3–6.",
+    "Write the story entirely in Simplified Chinese (Mandarin). Use simple vocabulary appropriate for young children.",
   Spanish:
-    "Write the story entirely in Spanish. Use simple vocabulary appropriate for young children aged 3–6.",
+    "Write the story entirely in Spanish. Use simple vocabulary appropriate for young children.",
+};
+
+// BCP-47 codes for each language
+const LANGUAGE_CODES: Record<string, string> = {
+  English: "en-US",
+  Mandarin: "zh-CN",
+  Spanish: "es-ES",
 };
 
 function buildStoryPrompt(config: StoryConfig): string {
   const wordCount = config.lengthMinutes * WORDS_PER_MINUTE;
 
-  // Resolve the actual character description
   const characterDesc =
     config.characterType === "Custom" && config.customCharacter?.trim()
       ? config.customCharacter.trim()
@@ -64,7 +72,7 @@ Write a bedtime story with the following details:
 - Target length: approximately ${wordCount} words (about ${config.lengthMinutes} minutes when read aloud at a calm pace)
 
 Requirements:
-- Write in simple, warm, soothing language appropriate for 3–6 year olds
+- Write in simple, warm, soothing language appropriate for the child's age
 - The story should have a gentle, calming ending that helps children drift off to sleep
 - Use short sentences and vivid but soft imagery
 - Include a satisfying narrative arc: a small adventure or challenge, and a peaceful resolution
@@ -95,6 +103,7 @@ export const appRouter = router({
     }),
   }),
 
+  // ── Story generation ─────────────────────────────────────────────────────────
   story: router({
     generate: publicProcedure
       .input(
@@ -113,6 +122,7 @@ export const appRouter = router({
           language: z.enum(["English", "Mandarin", "Spanish"]).default("English"),
           ageGroup: z.enum(["3-4", "5-6", "7-8", "8+"]).default("5-6"),
           voiceId: z.string().optional(),
+          voiceLanguageCode: z.string().optional(),
           storyIdea: z.string().max(300).optional(),
         })
       )
@@ -120,6 +130,7 @@ export const appRouter = router({
         const config: StoryConfig = {
           ...input,
           language: input.language as StoryConfig["language"],
+          ageGroup: input.ageGroup as StoryConfig["ageGroup"],
         };
         const prompt = buildStoryPrompt(config);
 
@@ -139,9 +150,7 @@ export const appRouter = router({
         const raw: string =
           typeof rawContent === "string"
             ? rawContent
-            : rawContent
-                .map((c) => (c.type === "text" ? c.text : ""))
-                .join("");
+            : rawContent.map((c) => (c.type === "text" ? c.text : "")).join("");
 
         let parsed: { title?: string; paragraphs?: string[] };
         try {
@@ -166,6 +175,47 @@ export const appRouter = router({
           config,
           generatedAt: new Date().toISOString(),
         };
+      }),
+  }),
+
+  // ── Google Cloud TTS ─────────────────────────────────────────────────────────
+  tts: router({
+    /**
+     * List available Google Cloud voices for a given language.
+     */
+    listVoices: publicProcedure
+      .input(z.object({ language: z.enum(["English", "Mandarin", "Spanish"]) }))
+      .query(async ({ input }) => {
+        const voices = await listGoogleVoices(input.language);
+        return { voices };
+      }),
+
+    /**
+     * Synthesize a paragraph of text to MP3 audio.
+     * Returns a storage URL that the client can play directly.
+     */
+    synthesize: publicProcedure
+      .input(
+        z.object({
+          text: z.string().max(5000),
+          voiceId: z.string(),       // Google voice name, e.g. "en-US-Neural2-A"
+          languageCode: z.string(),  // BCP-47, e.g. "en-US"
+          speakingRate: z.number().min(0.25).max(4.0).default(0.7),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const audioBuffer = await synthesizeSpeech({
+          text: input.text,
+          voiceId: input.voiceId,
+          languageCode: input.languageCode,
+          speakingRate: input.speakingRate,
+        });
+
+        // Upload to storage and return a URL the client can stream
+        const key = `tts/${randomUUID()}.mp3`;
+        const { url } = await storagePut(key, audioBuffer, "audio/mpeg");
+
+        return { url };
       }),
   }),
 });

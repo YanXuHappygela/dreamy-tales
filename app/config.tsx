@@ -55,6 +55,7 @@ export default function ConfigScreen() {
   const [language, setLanguage] = useState<StoryLanguage>("English");
   const [ageGroup, setAgeGroup] = useState<AgeGroup>("5-6");
   const [voiceId, setVoiceId] = useState<string | undefined>(undefined);
+  const [voiceLanguageCode, setVoiceLanguageCode] = useState<string | undefined>(undefined);
 
   const generateMutation = trpc.story.generate.useMutation({
     onSuccess: async (data: GeneratedStory) => {
@@ -75,6 +76,7 @@ export default function ConfigScreen() {
       language,
       ageGroup,
       voiceId,
+      voiceLanguageCode,
       storyIdea: storyIdea.trim() || undefined,
     });
   };
@@ -291,7 +293,11 @@ export default function ConfigScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Narrator Voice</Text>
           <Text style={styles.voiceHint}>Tap ▶ to preview a voice before selecting.</Text>
-          <VoicePicker language={language} selectedVoiceId={voiceId} onVoiceSelect={setVoiceId} />
+          <VoicePicker
+            language={language}
+            selectedVoiceId={voiceId}
+            onVoiceSelect={(id, langCode) => { setVoiceId(id); setVoiceLanguageCode(langCode); }}
+          />
         </View>
 
         {/* Generate Button */}

@@ -12,7 +12,8 @@ export interface StoryConfig {
   lengthMinutes: number;       // 3–10
   language: StoryLanguage;
   ageGroup: AgeGroup;          // target age group
-  voiceId?: string;            // expo-speech voice identifier (optional)
+  voiceId?: string;            // Google Cloud voice name, e.g. "en-US-Neural2-A"
+  voiceLanguageCode?: string;  // BCP-47 code for the selected voice, e.g. "en-US"
   storyIdea?: string;          // optional free-text story line description
 }
 

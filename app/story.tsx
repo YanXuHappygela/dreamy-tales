@@ -1,27 +1,29 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Alert, Animated,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Platform, Alert, Animated, Share,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Speech from "expo-speech";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 
-import { Share } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GeneratedStory, SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
+import { trpc } from "@/lib/trpc";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
 
+// BCP-47 fallback codes
 const LANGUAGE_CODES: Record<string, string> = {
   English: "en-US", Mandarin: "zh-CN", Spanish: "es-ES",
 };
 
-type PlayState = "idle" | "playing" | "paused" | "done";
+type PlayState = "idle" | "playing" | "paused" | "loading" | "done";
 type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
 const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
@@ -39,8 +41,12 @@ export default function StoryScreen() {
   const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
   const playStateRef = useRef<PlayState>("idle");
   const currentParagraphRef = useRef(0);
+  const audioPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // tRPC mutation for TTS synthesis
+  const synthesizeMutation = trpc.tts.synthesize.useMutation();
 
   useEffect(() => {
     if (params.storyData) {
@@ -50,44 +56,114 @@ export default function StoryScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
       } catch { /**/ }
     }
-    return () => { Speech.stop(); };
+    return () => {
+      audioPlayerRef.current?.remove();
+      audioPlayerRef.current = null;
+    };
   }, [params.storyData, fadeAnim]);
 
+  const stopAudio = useCallback(() => {
+    audioPlayerRef.current?.remove();
+    audioPlayerRef.current = null;
+  }, []);
+
   const speakParagraph = useCallback(
-    (index: number, paragraphs: string[], config: GeneratedStory["config"]) => {
-      if (index >= paragraphs.length) { setPlayState("done"); setCurrentParagraph(0); currentParagraphRef.current = 0; return; }
+    async (index: number, paragraphs: string[], config: GeneratedStory["config"]) => {
+      if (playStateRef.current === "idle" || playStateRef.current === "done") return;
+      if (index >= paragraphs.length) {
+        setPlayState("done"); playStateRef.current = "done";
+        setCurrentParagraph(0); currentParagraphRef.current = 0;
+        return;
+      }
+
       setCurrentParagraph(index);
       currentParagraphRef.current = index;
-      Speech.speak(paragraphs[index], {
-        rate: speedRef.current,
-        pitch: 1.05,
-        language: LANGUAGE_CODES[config.language ?? "English"] ?? "en-US",
-        ...(config.voiceId ? { voice: config.voiceId } : {}),
-        onDone: () => speakParagraph(index + 1, paragraphs, config),
-        onStopped: () => { /**/ },
-        onError: () => setPlayState("idle"),
-      });
-    }, []
+      setPlayState("loading"); playStateRef.current = "loading";
+
+      const langCode = config.voiceLanguageCode
+        ?? LANGUAGE_CODES[config.language ?? "English"]
+        ?? "en-US";
+      const voiceId = config.voiceId ?? "en-US-Neural2-C";
+
+      try {
+        const result = await synthesizeMutation.mutateAsync({
+          text: paragraphs[index],
+          voiceId,
+          languageCode: langCode,
+          speakingRate: speedRef.current,
+        });
+
+        // If stopped while synthesizing, bail out
+        const stateAfterSynth = playStateRef.current as string;
+        if (stateAfterSynth === "idle" || stateAfterSynth === "done") return;
+
+        await setAudioModeAsync({ playsInSilentMode: true });
+
+        stopAudio();
+
+        const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+        const audioUrl = result.url.startsWith("http")
+          ? result.url
+          : `${apiBase}${result.url}`;
+
+        const player = createAudioPlayer({ uri: audioUrl });
+        audioPlayerRef.current = player;
+
+        setPlayState("playing"); playStateRef.current = "playing";
+        player.play();
+
+        // Poll for completion
+        const poll = setInterval(() => {
+          const pollState = playStateRef.current as string;
+          if (pollState === "idle" || pollState === "done") {
+            clearInterval(poll);
+            return;
+          }
+          if (!player.playing) {
+            clearInterval(poll);
+            player.remove();
+            if (audioPlayerRef.current === player) audioPlayerRef.current = null;
+            speakParagraph(index + 1, paragraphs, config);
+          }
+        }, 300);
+      } catch {
+        const catchState = playStateRef.current as string;
+        if (catchState !== "idle") {
+          setPlayState("idle"); playStateRef.current = "idle";
+        }
+      }
+    },
+    [synthesizeMutation, stopAudio]
   );
 
   const handlePlay = async () => {
     if (!story) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (playState === "paused" && Platform.OS !== "android") { await Speech.resume(); setPlayState("playing"); playStateRef.current = "playing"; return; }
-    if (playState === "playing") {
-      if (Platform.OS !== "android") { await Speech.pause(); setPlayState("paused"); playStateRef.current = "paused"; }
-      else { await Speech.stop(); setPlayState("idle"); playStateRef.current = "idle"; }
+
+    if (playState === "playing" || playState === "loading") {
+      stopAudio();
+      setPlayState("idle"); playStateRef.current = "idle";
       return;
     }
-    setPlayState("playing"); setCurrentParagraph(0); currentParagraphRef.current = 0;
+
+    if (playState === "paused") {
+      // Resume from current paragraph
+      setPlayState("loading"); playStateRef.current = "loading";
+      speakParagraph(currentParagraphRef.current, story.paragraphs, story.config);
+      return;
+    }
+
+    // idle or done — start from beginning
+    setCurrentParagraph(0); currentParagraphRef.current = 0;
     speedRef.current = speed;
-    playStateRef.current = "playing";
+    playStateRef.current = "loading";
+    setPlayState("loading");
     speakParagraph(0, story.paragraphs, story.config);
   };
 
-  const handleStop = async () => {
+  const handleStop = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await Speech.stop();
+    stopAudio();
     setPlayState("idle"); playStateRef.current = "idle";
     setCurrentParagraph(0); currentParagraphRef.current = 0;
   };
@@ -104,15 +180,16 @@ export default function StoryScreen() {
     } catch { Alert.alert("Error", "Could not save the story. Please try again."); }
   };
 
-  const handleBack = async () => { await Speech.stop(); router.back(); };
-
   const handleShare = async () => {
     if (!story) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const text = `${story.title}\n\n${story.paragraphs.join("\n\n")}`;
-    try {
-      await Share.share({ message: text, title: story.title });
-    } catch { /**/ }
+    try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
+  };
+
+  const handleBack = () => {
+    stopAudio();
+    router.back();
   };
 
   if (!story) {
@@ -129,6 +206,9 @@ export default function StoryScreen() {
   const totalParagraphs = story.paragraphs.length;
   const progress = playState === "done" ? 1 : totalParagraphs > 0 ? currentParagraph / totalParagraphs : 0;
 
+  const isPlaying = playState === "playing" || playState === "loading";
+  const playIcon = isPlaying ? "pause.fill" : "play.fill";
+
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
       {/* Top bar */}
@@ -139,9 +219,7 @@ export default function StoryScreen() {
         <Text style={styles.topBarTitle} numberOfLines={1}>{story.title}</Text>
         <TouchableOpacity
           style={[styles.iconBtn, isSaved && styles.iconBtnSaved]}
-          onPress={handleSave}
-          disabled={isSaved}
-          activeOpacity={0.7}
+          onPress={handleSave} disabled={isSaved} activeOpacity={0.7}
         >
           <IconSymbol name="heart.fill" size={20} color={isSaved ? "#F87171" : "#9B8BB4"} />
         </TouchableOpacity>
@@ -159,7 +237,7 @@ export default function StoryScreen() {
             <Text style={styles.metaText}>🌐 {story.config.language ?? "English"} • 🕐 ~{story.config.lengthMinutes} min</Text>
           </View>
           {story.paragraphs.map((para, idx) => (
-            <Text key={idx} style={[styles.paragraph, idx === currentParagraph && (playState === "playing" || playState === "paused") && styles.paragraphActive]}>
+            <Text key={idx} style={[styles.paragraph, idx === currentParagraph && isPlaying && styles.paragraphActive]}>
               {para}
             </Text>
           ))}
@@ -169,7 +247,6 @@ export default function StoryScreen() {
 
       {/* Controls */}
       <View style={styles.controls}>
-        {/* Progress bar */}
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
         </View>
@@ -183,15 +260,17 @@ export default function StoryScreen() {
                 key={s}
                 style={[styles.speedChip, sel && styles.speedChipSelected]}
                 onPress={async () => {
-                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSpeed(s);
-                speedRef.current = s;
-                // If currently playing, restart the current paragraph at the new speed
-                if (playStateRef.current === "playing" && story) {
-                  await Speech.stop();
-                  speakParagraph(currentParagraphRef.current, story.paragraphs, story.config);
-                }
-              }}
+                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSpeed(s);
+                  speedRef.current = s;
+                  // Restart current paragraph at new speed if playing
+                  if ((playStateRef.current === "playing" || playStateRef.current === "loading") && story) {
+                    stopAudio();
+                    playStateRef.current = "loading";
+                    setPlayState("loading");
+                    speakParagraph(currentParagraphRef.current, story.paragraphs, story.config);
+                  }
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.speedChipText, sel && styles.speedChipTextSelected]}>{s}×</Text>
@@ -204,20 +283,22 @@ export default function StoryScreen() {
         <View style={styles.controlRow}>
           <TouchableOpacity
             style={[styles.controlBtn, playState === "idle" && styles.controlBtnDisabled]}
-            onPress={handleStop}
-            disabled={playState === "idle"}
-            activeOpacity={0.7}
+            onPress={handleStop} disabled={playState === "idle"} activeOpacity={0.7}
           >
             <IconSymbol name="stop.fill" size={22} color={playState === "idle" ? "#2E2A5A" : "#9B8BB4"} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85}>
-            <IconSymbol name={playState === "playing" ? "pause.fill" : "play.fill"} size={30} color="#0D0B2B" />
+            {playState === "loading"
+              ? <Text style={styles.loadingDots}>…</Text>
+              : <IconSymbol name={playIcon} size={30} color="#0D0B2B" />
+            }
           </TouchableOpacity>
 
           <View style={styles.statusContainer}>
             <Text style={styles.statusText}>
               {playState === "idle" && "Tap to read"}
+              {playState === "loading" && "Loading…"}
               {playState === "playing" && "Reading…"}
               {playState === "paused" && "Paused"}
               {playState === "done" && "The End ✨"}
@@ -256,6 +337,7 @@ const styles = StyleSheet.create({
   controlBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center" },
   controlBtnDisabled: { borderColor: "#2E2A5A" },
   playBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: Y, alignItems: "center", justifyContent: "center", elevation: 10 },
+  loadingDots: { fontSize: 24, color: "#0D0B2B", fontWeight: "700" },
   statusContainer: { width: 80, alignItems: "flex-end" },
   statusText: { fontSize: 13, color: "#9B8BB4", fontWeight: "500" },
 });

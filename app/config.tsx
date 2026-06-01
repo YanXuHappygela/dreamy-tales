@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Platform,
@@ -43,6 +43,13 @@ const LANGUAGE_OPTIONS: { label: StoryLanguage }[] = [
   { label: "English" }, { label: "Mandarin" }, { label: "Spanish" },
 ];
 
+interface SavedPrefs {
+  ageGroup?: AgeGroup;
+  language?: StoryLanguage;
+  voiceId?: string;
+  voiceLanguageCode?: string;
+}
+
 export default function ConfigScreen() {
   const router = useRouter();
   const [childName, setChildName] = useState("");
@@ -56,10 +63,37 @@ export default function ConfigScreen() {
   const [ageGroup, setAgeGroup] = useState<AgeGroup>("5-6");
   const [voiceId, setVoiceId] = useState<string | undefined>(undefined);
   const [voiceLanguageCode, setVoiceLanguageCode] = useState<string | undefined>(undefined);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+
+  // Load saved preferences on mount
+  useEffect(() => {
+    AsyncStorage.getItem(PREFS_KEY)
+      .then((raw) => {
+        if (raw) {
+          const prefs: SavedPrefs = JSON.parse(raw);
+          if (prefs.ageGroup) setAgeGroup(prefs.ageGroup);
+          if (prefs.language) setLanguage(prefs.language);
+          if (prefs.voiceId) setVoiceId(prefs.voiceId);
+          if (prefs.voiceLanguageCode) setVoiceLanguageCode(prefs.voiceLanguageCode);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPrefsLoaded(true));
+  }, []);
+
+  const savePrefs = useCallback(
+    async (updates: Partial<SavedPrefs>) => {
+      try {
+        const raw = await AsyncStorage.getItem(PREFS_KEY);
+        const existing: SavedPrefs = raw ? JSON.parse(raw) : {};
+        await AsyncStorage.setItem(PREFS_KEY, JSON.stringify({ ...existing, ...updates }));
+      } catch { /**/ }
+    },
+    []
+  );
 
   const generateMutation = trpc.story.generate.useMutation({
     onSuccess: async (data: GeneratedStory) => {
-      try { await AsyncStorage.setItem(PREFS_KEY, JSON.stringify({ language, voiceId })); } catch { /**/ }
       router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
     },
   });
@@ -81,11 +115,34 @@ export default function ConfigScreen() {
     });
   };
 
-  const handleLanguageChange = useCallback((lang: StoryLanguage) => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setLanguage(lang);
-    setVoiceId(undefined);
-  }, []);
+  const handleLanguageChange = useCallback(
+    (lang: StoryLanguage) => {
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setLanguage(lang);
+      setVoiceId(undefined);
+      setVoiceLanguageCode(undefined);
+      savePrefs({ language: lang, voiceId: undefined, voiceLanguageCode: undefined });
+    },
+    [savePrefs]
+  );
+
+  const handleAgeGroupChange = useCallback(
+    (ag: AgeGroup) => {
+      if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setAgeGroup(ag);
+      savePrefs({ ageGroup: ag });
+    },
+    [savePrefs]
+  );
+
+  const handleVoiceSelect = useCallback(
+    (id: string, langCode: string) => {
+      setVoiceId(id);
+      setVoiceLanguageCode(langCode);
+      savePrefs({ voiceId: id, voiceLanguageCode: langCode });
+    },
+    [savePrefs]
+  );
 
   const tap = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -116,7 +173,7 @@ export default function ConfigScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Child's Name */}
+        {/* Main Character Name */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Main Character Name (optional)</Text>
           <TextInput
@@ -225,7 +282,7 @@ export default function ConfigScreen() {
           <Text style={styles.charCount}>{storyIdea.length}/300</Text>
         </View>
 
-        {/* Story Length — Dropdown */}
+        {/* Story Length */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Length</Text>
           <View style={styles.pickerWrapper}>
@@ -237,12 +294,7 @@ export default function ConfigScreen() {
               itemStyle={styles.pickerItem}
             >
               {LENGTH_OPTIONS.map((min) => (
-                <Picker.Item
-                  key={min}
-                  label={`${min} minutes`}
-                  value={min}
-                  color={Platform.OS === "ios" ? "#F0EAF8" : "#F0EAF8"}
-                />
+                <Picker.Item key={min} label={`${min} minutes`} value={min} color="#F0EAF8" />
               ))}
             </Picker>
           </View>
@@ -258,7 +310,7 @@ export default function ConfigScreen() {
                 <TouchableOpacity
                   key={ag}
                   style={[styles.ageChip, sel && styles.ageChipSelected]}
-                  onPress={() => { tap(); setAgeGroup(ag); }}
+                  onPress={() => handleAgeGroupChange(ag)}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.ageChipLabel, sel && styles.ageChipLabelSelected]}>{ag}</Text>
@@ -293,11 +345,13 @@ export default function ConfigScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Narrator Voice</Text>
           <Text style={styles.voiceHint}>Tap ▶ to preview a voice before selecting.</Text>
-          <VoicePicker
-            language={language}
-            selectedVoiceId={voiceId}
-            onVoiceSelect={(id, langCode) => { setVoiceId(id); setVoiceLanguageCode(langCode); }}
-          />
+          {prefsLoaded && (
+            <VoicePicker
+              language={language}
+              selectedVoiceId={voiceId}
+              onVoiceSelect={handleVoiceSelect}
+            />
+          )}
         </View>
 
         {/* Generate Button */}
@@ -338,25 +392,21 @@ const styles = StyleSheet.create({
   storyIdeaInput: { minHeight: 90, textAlignVertical: "top", paddingTop: 14 },
   optionalTag: { fontSize: 12, fontWeight: "400", color: "#4A4270", textTransform: "none", letterSpacing: 0 },
   charCount: { fontSize: 12, color: "#4A4270", textAlign: "right", marginTop: 6 },
-  // Dropdown picker
   pickerWrapper: { backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: Y, overflow: "hidden" },
   picker: { color: "#F0EAF8", height: Platform.OS === "ios" ? 150 : 52, backgroundColor: "transparent" },
   pickerItem: { color: "#F0EAF8", fontSize: 16, backgroundColor: "#1A1740" },
-  // Language
-  languageRow: { flexDirection: "row", gap: 10 },
-  languageChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 16, borderWidth: 1.5, borderColor: "#2E2A5A", paddingVertical: 14, paddingHorizontal: 8 },
-  languageChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
-  languageLabel: { fontSize: 13, fontWeight: "600", color: "#9B8BB4", textAlign: "center" },
-  languageLabelSelected: { color: Y },
-  voiceHint: { fontSize: 12, color: "#4A4270", marginBottom: 10, fontStyle: "italic" },
-  // Age group
   ageRow: { flexDirection: "row", gap: 10 },
   ageChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 16, borderWidth: 1.5, borderColor: "#2E2A5A", paddingVertical: 14 },
   ageChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
   ageChipLabel: { fontSize: 16, fontWeight: "700", color: "#9B8BB4" },
   ageChipLabelSelected: { color: Y },
   ageChipSub: { fontSize: 11, color: "#4A4270", marginTop: 2 },
-  // Generate button
+  languageRow: { flexDirection: "row", gap: 10 },
+  languageChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 16, borderWidth: 1.5, borderColor: "#2E2A5A", paddingVertical: 14, paddingHorizontal: 8 },
+  languageChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
+  languageLabel: { fontSize: 13, fontWeight: "600", color: "#9B8BB4", textAlign: "center" },
+  languageLabelSelected: { color: Y },
+  voiceHint: { fontSize: 12, color: "#4A4270", marginBottom: 10, fontStyle: "italic" },
   generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginTop: 8, elevation: 8 },
   generateBtnText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
   errorText: { color: "#F87171", textAlign: "center", marginTop: 12, fontSize: 14 },

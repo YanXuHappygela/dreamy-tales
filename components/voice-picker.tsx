@@ -21,7 +21,7 @@ const TIER_COLORS: Record<string, string> = {
   Standard: "#6B8AAA",
 };
 
-type GenderFilter = "All" | "Female" | "Male";
+type GenderFilter = "Female" | "Male";
 
 export interface CloudVoiceOption {
   id: string;
@@ -38,7 +38,7 @@ interface VoicePickerProps {
 }
 
 export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoicePickerProps) {
-  const [genderFilter, setGenderFilter] = useState<GenderFilter>("All");
+  const [genderFilter, setGenderFilter] = useState<GenderFilter>("Female");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const previewingRef = useRef<string | null>(null);
   const previewPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
@@ -51,10 +51,7 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
   const allVoices = data?.voices ?? [];
 
   // Apply gender filter
-  const voices = allVoices.filter((v) => {
-    if (genderFilter === "All") return true;
-    return v.gender === genderFilter;
-  });
+  const voices = allVoices.filter((v) => v.gender === genderFilter);
 
   // Auto-select first WaveNet voice when list loads or language/filter changes
   useEffect(() => {
@@ -168,7 +165,7 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
     <View style={styles.container}>
       {/* Gender filter */}
       <View style={styles.genderRow}>
-        {(["All", "Female", "Male"] as GenderFilter[]).map((g) => {
+        {(["Female", "Male"] as GenderFilter[]).map((g) => {
           const sel = genderFilter === g;
           return (
             <TouchableOpacity
@@ -178,7 +175,7 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
               activeOpacity={0.7}
             >
               <Text style={[styles.genderChipText, sel && styles.genderChipTextSelected]}>
-                {g === "Female" ? "♀ Female" : g === "Male" ? "♂ Male" : "All"}
+                {g === "Female" ? "♀ Female" : "♂ Male"}
               </Text>
             </TouchableOpacity>
           );

@@ -56,13 +56,18 @@ export async function listGoogleVoices(language: string): Promise<CloudVoiceOpti
     );
     if (!matchingCode) continue;
 
-    // Determine tier from name
-    let tier = "Standard";
-    if (v.name.includes("Neural2")) tier = "Neural2";
-    else if (v.name.includes("WaveNet")) tier = "WaveNet";
-    else if (v.name.includes("Studio")) tier = "Studio";
-    else if (v.name.includes("Polyglot")) tier = "Polyglot";
-    else if (v.name.includes("News")) tier = "News";
+    // Determine tier from name — must match exactly WaveNet or Standard
+    // Standard voices follow the pattern: {lang}-Standard-{A-Z}
+    // WaveNet voices follow the pattern: {lang}-Wavenet-{A-Z} or {lang}-WaveNet-{A-Z}
+    let tier: string;
+    if (/wavenet/i.test(v.name)) {
+      tier = "WaveNet";
+    } else if (/standard/i.test(v.name)) {
+      tier = "Standard";
+    } else {
+      // Skip all other model families (Neural2, Studio, Chirp, Journey, News, Polyglot, etc.)
+      continue;
+    }
 
     const genderLabel =
       v.ssmlGender === "MALE" ? "Male"
@@ -82,20 +87,16 @@ export async function listGoogleVoices(language: string): Promise<CloudVoiceOpti
     });
   }
 
-  // Keep only Standard and WaveNet tiers
-  const allowed = new Set(["WaveNet", "Standard"]);
-  const filtered = voices.filter((v) => allowed.has(v.tier));
-
   // Sort: WaveNet first, then Standard; within tier by name
   const TIER_ORDER: Record<string, number> = { WaveNet: 0, Standard: 1 };
-  filtered.sort((a, b) => {
+  voices.sort((a, b) => {
     const ta = TIER_ORDER[a.tier] ?? 9;
     const tb = TIER_ORDER[b.tier] ?? 9;
     if (ta !== tb) return ta - tb;
     return a.name.localeCompare(b.name);
   });
 
-  return filtered;
+  return voices;
 }
 
 // ── Audio synthesis ───────────────────────────────────────────────────────────

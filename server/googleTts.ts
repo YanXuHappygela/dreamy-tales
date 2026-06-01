@@ -82,16 +82,20 @@ export async function listGoogleVoices(language: string): Promise<CloudVoiceOpti
     });
   }
 
-  // Sort: Neural2 first, then WaveNet, then Studio, then Standard; within tier by name
-  const TIER_ORDER: Record<string, number> = { Neural2: 0, Studio: 1, WaveNet: 2, News: 3, Polyglot: 4, Standard: 5 };
-  voices.sort((a, b) => {
+  // Keep only Standard and WaveNet tiers
+  const allowed = new Set(["WaveNet", "Standard"]);
+  const filtered = voices.filter((v) => allowed.has(v.tier));
+
+  // Sort: WaveNet first, then Standard; within tier by name
+  const TIER_ORDER: Record<string, number> = { WaveNet: 0, Standard: 1 };
+  filtered.sort((a, b) => {
     const ta = TIER_ORDER[a.tier] ?? 9;
     const tb = TIER_ORDER[b.tier] ?? 9;
     if (ta !== tb) return ta - tb;
     return a.name.localeCompare(b.name);
   });
 
-  return voices;
+  return filtered;
 }
 
 // ── Audio synthesis ───────────────────────────────────────────────────────────

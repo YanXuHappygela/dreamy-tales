@@ -212,9 +212,9 @@ export const appRouter = router({
       .input(
         z.object({
           text: z.string().max(5000),
-          voiceId: z.string(),       // Google voice name, e.g. "en-US-Neural2-A"
-          languageCode: z.string(),  // BCP-47, e.g. "en-US"
-          speakingRate: z.number().min(0.25).max(4.0).default(0.7),
+          voiceId: z.string().min(1),  // Google voice name, e.g. "en-US-Wavenet-C"
+          languageCode: z.string().min(2), // BCP-47, e.g. "en-US"
+          speakingRate: z.number().min(0.25).max(4.0).default(0.9),
         })
       )
       .mutation(async ({ input }) => {

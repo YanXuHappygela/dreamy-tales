@@ -105,7 +105,14 @@ export default function StoryScreen() {
         config.voiceLanguageCode ??
         LANGUAGE_CODES[config.language ?? "English"] ??
         "en-US";
-      const voiceId = config.voiceId ?? "en-US-Wavenet-C";
+
+      // Derive a safe default voice that matches the language
+      const DEFAULT_VOICES: Record<string, string> = {
+        "en-US": "en-US-Wavenet-C",
+        "zh-CN": "cmn-CN-Wavenet-A",
+        "es-ES": "es-ES-Wavenet-B",
+      };
+      const voiceId = config.voiceId ?? DEFAULT_VOICES[langCode] ?? "en-US-Wavenet-C";
 
       try {
         const result = await synthesizeMutation.mutateAsync({
@@ -164,9 +171,13 @@ export default function StoryScreen() {
         setPlayState("playing");
         player.play();
 
-      } catch {
+      } catch (err) {
         if (generation === generationRef.current) {
           setPlayState("idle");
+          Alert.alert(
+            "Narration error",
+            `Could not load audio for paragraph ${index + 1}. Please check your internet connection and try again.\n\n${String(err)}`
+          );
         }
       }
     },

@@ -38,17 +38,14 @@ export default function StoryScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
 
-  // Refs that are safe to read inside async callbacks
   const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
   const currentParagraphRef = useRef(0);
   const audioPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const listenerRef = useRef<{ remove: () => void } | null>(null);
 
   /**
-   * Generation counter — incremented every time we start or stop narration.
-   * Each speakParagraph call captures the generation at the time it was launched.
-   * If the generation changes before the async work completes, the call is stale
-   * and must not proceed. This prevents multiple concurrent chains.
+   * Generation counter — incremented on every stop/start.
+   * Any in-flight async work checks this before proceeding.
    */
   const generationRef = useRef(0);
 
@@ -65,17 +62,16 @@ export default function StoryScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
       } catch { /**/ }
     }
-    return () => {
-      stopAll();
-    };
+    return () => { stopAll(); };
   }, [params.storyData, fadeAnim]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Stop audio, clear poll, and bump the generation so any in-flight chain aborts. */
+  /** Atomically stop everything and invalidate any in-flight chain. */
   const stopAll = useCallback(() => {
     generationRef.current += 1;
-    if (pollRef.current !== null) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
+    // Remove event listener before removing player
+    if (listenerRef.current) {
+      try { listenerRef.current.remove(); } catch { /**/ }
+      listenerRef.current = null;
     }
     if (audioPlayerRef.current) {
       try { audioPlayerRef.current.remove(); } catch { /**/ }
@@ -88,9 +84,8 @@ export default function StoryScreen() {
       index: number,
       paragraphs: string[],
       config: GeneratedStory["config"],
-      generation: number   // captured at chain-start; stale if !== generationRef.current
+      generation: number
     ) => {
-      // Abort if this chain has been superseded
       if (generation !== generationRef.current) return;
 
       if (index >= paragraphs.length) {
@@ -118,21 +113,23 @@ export default function StoryScreen() {
           speakingRate: speedRef.current,
         });
 
-        // Check again — user may have stopped while we were synthesizing
+        // Stale check after async synthesis
         if (generation !== generationRef.current) return;
 
         await setAudioModeAsync({ playsInSilentMode: true });
 
-        // Remove any leftover player
+        // Clean up any previous player + listener
+        if (listenerRef.current) {
+          try { listenerRef.current.remove(); } catch { /**/ }
+          listenerRef.current = null;
+        }
         if (audioPlayerRef.current) {
           try { audioPlayerRef.current.remove(); } catch { /**/ }
           audioPlayerRef.current = null;
         }
-        // Clear any leftover poll
-        if (pollRef.current !== null) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
+
+        // Stale check again after cleanup
+        if (generation !== generationRef.current) return;
 
         const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
         const audioUrl = result.url.startsWith("http")
@@ -142,34 +139,28 @@ export default function StoryScreen() {
         const player = createAudioPlayer({ uri: audioUrl });
         audioPlayerRef.current = player;
 
-        setPlayState("playing");
-        player.play();
-
-        // Poll for completion — use the captured generation so the callback
-        // can detect staleness without closing over mutable state
-        const capturedGen = generation;
-        pollRef.current = setInterval(() => {
-          if (capturedGen !== generationRef.current) {
-            clearInterval(pollRef.current!);
-            pollRef.current = null;
+        // Use didJustFinish event — fires exactly once when playback ends.
+        // This replaces the polling loop that caused the double-voice bug on Android.
+        let didFinishFired = false;
+        const subscription = player.addListener("playbackStatusUpdate", (status) => {
+          if (generation !== generationRef.current) {
+            subscription.remove();
             return;
           }
-          // player.playing can briefly be false between buffering ticks on Android;
-          // also check that the player object hasn't been replaced
-          if (audioPlayerRef.current !== player) {
-            clearInterval(pollRef.current!);
-            pollRef.current = null;
-            return;
-          }
-          if (!player.playing) {
-            clearInterval(pollRef.current!);
-            pollRef.current = null;
+          if (status.didJustFinish && !didFinishFired) {
+            didFinishFired = true;
+            subscription.remove();
+            if (listenerRef.current === subscription) listenerRef.current = null;
             try { player.remove(); } catch { /**/ }
             if (audioPlayerRef.current === player) audioPlayerRef.current = null;
-            // Advance to next paragraph in the same generation
-            speakParagraph(index + 1, paragraphs, config, capturedGen);
+            // Advance to next paragraph
+            speakParagraph(index + 1, paragraphs, config, generation);
           }
-        }, 400);
+        });
+        listenerRef.current = subscription;
+
+        setPlayState("playing");
+        player.play();
 
       } catch {
         if (generation === generationRef.current) {
@@ -185,15 +176,13 @@ export default function StoryScreen() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (playState === "playing" || playState === "loading") {
-      // Pause: stop audio but remember position
       stopAll();
       setPlayState("paused");
       return;
     }
 
     if (playState === "paused") {
-      // Resume from current paragraph
-      const gen = generationRef.current; // stopAll already bumped; we use current
+      const gen = generationRef.current;
       speedRef.current = speed;
       setPlayState("loading");
       speakParagraph(currentParagraphRef.current, story.paragraphs, story.config, gen);
@@ -240,16 +229,12 @@ export default function StoryScreen() {
     try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
   };
 
-  const handleBack = () => {
-    stopAll();
-    router.back();
-  };
+  const handleBack = () => { stopAll(); router.back(); };
 
   const handleSpeedChange = async (s: NarrationSpeed) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSpeed(s);
     speedRef.current = s;
-    // If currently playing/loading, restart the current paragraph at the new speed
     if ((playState === "playing" || playState === "loading") && story) {
       const para = currentParagraphRef.current;
       stopAll();
@@ -281,7 +266,6 @@ export default function StoryScreen() {
       : 0;
 
   const isActive = playState === "playing" || playState === "loading";
-  const playIcon = isActive ? "pause.fill" : "play.fill";
 
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
@@ -336,12 +320,10 @@ export default function StoryScreen() {
 
       {/* Controls */}
       <View style={styles.controls}>
-        {/* Progress bar */}
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
         </View>
 
-        {/* Speed chips */}
         <View style={styles.speedRow}>
           {SPEED_OPTIONS.map((s) => {
             const sel = speed === s;
@@ -360,7 +342,6 @@ export default function StoryScreen() {
           })}
         </View>
 
-        {/* Play / Stop row */}
         <View style={styles.controlRow}>
           <TouchableOpacity
             style={[styles.controlBtn, playState === "idle" && styles.controlBtnDisabled]}
@@ -378,7 +359,11 @@ export default function StoryScreen() {
           <TouchableOpacity style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85}>
             {playState === "loading"
               ? <Text style={styles.loadingDots}>…</Text>
-              : <IconSymbol name={playIcon} size={30} color="#0D0B2B" />
+              : <IconSymbol
+                  name={isActive ? "pause.fill" : "play.fill"}
+                  size={30}
+                  color="#0D0B2B"
+                />
             }
           </TouchableOpacity>
 

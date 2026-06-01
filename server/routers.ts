@@ -8,7 +8,7 @@ import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
 
 // Approximate words per minute for a calm, soothing read-aloud voice
-const WORDS_PER_MINUTE = 110;
+const WORDS_PER_MINUTE = 132;
 
 const AGE_INSTRUCTIONS: Record<string, string> = {
   "3-4": "The child is 3–4 years old. Use very simple words (1–2 syllables where possible), very short sentences (5–8 words), and highly repetitive, rhythmic language. Keep the story gentle, slow-paced, and focused on one simple idea.",
@@ -103,19 +103,11 @@ export const appRouter = router({
           characterType: z.string().max(80),
           customCharacter: z.string().max(80).optional(),
           scenario: z.enum([
-            "Forest",
-            "Space",
-            "Ocean",
-            "Castle",
-            "Jungle",
-            "Cloud Kingdom",
+            "Forest", "Space", "Ocean", "Castle", "Jungle", "Cloud Kingdom",
+            "Volcano", "Desert", "Mountain",
           ]),
           style: z.enum([
-            "Funny",
-            "Magical",
-            "Adventurous",
-            "Cozy",
-            "Mysterious",
+            "Funny", "Magical", "Adventurous", "Cozy", "Mysterious", "Silly",
           ]),
           lengthMinutes: z.number().int().min(3).max(10),
           language: z.enum(["English", "Mandarin", "Spanish"]).default("English"),

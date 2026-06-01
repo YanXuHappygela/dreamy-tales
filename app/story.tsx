@@ -8,6 +8,7 @@ import * as Speech from "expo-speech";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 
+import { Share } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GeneratedStory, SavedStory } from "@/shared/types";
@@ -24,7 +25,7 @@ type PlayState = "idle" | "playing" | "paused" | "done";
 type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
 const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
-const DEFAULT_SPEED: NarrationSpeed = 1.0;
+const DEFAULT_SPEED: NarrationSpeed = 0.7;
 
 export default function StoryScreen() {
   useKeepAwake();
@@ -105,6 +106,15 @@ export default function StoryScreen() {
 
   const handleBack = async () => { await Speech.stop(); router.back(); };
 
+  const handleShare = async () => {
+    if (!story) return;
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const text = `${story.title}\n\n${story.paragraphs.join("\n\n")}`;
+    try {
+      await Share.share({ message: text, title: story.title });
+    } catch { /**/ }
+  };
+
   if (!story) {
     return (
       <ScreenContainer containerClassName="bg-background">
@@ -134,6 +144,9 @@ export default function StoryScreen() {
           activeOpacity={0.7}
         >
           <IconSymbol name="heart.fill" size={20} color={isSaved ? "#F87171" : "#9B8BB4"} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} onPress={handleShare} activeOpacity={0.7}>
+          <IconSymbol name="paperplane.fill" size={18} color="#9B8BB4" />
         </TouchableOpacity>
       </View>
 

@@ -30,11 +30,13 @@ const SCENARIO_OPTIONS = [
   { label: "Forest", emoji: "🌲" }, { label: "Space", emoji: "🚀" },
   { label: "Ocean", emoji: "🌊" }, { label: "Castle", emoji: "🏰" },
   { label: "Jungle", emoji: "🌴" }, { label: "Cloud Kingdom", emoji: "☁️" },
+  { label: "Volcano", emoji: "🌋" }, { label: "Desert", emoji: "🏜️" },
+  { label: "Mountain", emoji: "⛰️" },
 ];
 const STYLE_OPTIONS = [
   { label: "Funny", emoji: "😄" }, { label: "Magical", emoji: "✨" },
   { label: "Adventurous", emoji: "🗺️" }, { label: "Cozy", emoji: "🛋️" },
-  { label: "Mysterious", emoji: "🔮" },
+  { label: "Mysterious", emoji: "🔮" }, { label: "Silly", emoji: "🤪" },
 ];
 const LENGTH_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 const LANGUAGE_OPTIONS: { label: StoryLanguage }[] = [
@@ -114,7 +116,7 @@ export default function ConfigScreen() {
 
         {/* Child's Name */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Child's Name (optional)</Text>
+          <Text style={styles.sectionLabel}>Main Character Name (optional)</Text>
           <TextInput
             style={styles.textInput}
             placeholder="e.g. Emma, Liam…"

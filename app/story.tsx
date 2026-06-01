@@ -106,13 +106,22 @@ export default function StoryScreen() {
         LANGUAGE_CODES[config.language ?? "English"] ??
         "en-US";
 
-      // Derive a safe default voice that matches the language
+      // Default voices per language code (always WaveNet/Standard — safe for all sessions)
       const DEFAULT_VOICES: Record<string, string> = {
         "en-US": "en-US-Wavenet-C",
+        "en-GB": "en-GB-Wavenet-A",
         "zh-CN": "cmn-CN-Wavenet-A",
+        "cmn-CN": "cmn-CN-Wavenet-A",
         "es-ES": "es-ES-Wavenet-B",
+        "es-US": "es-US-Wavenet-A",
       };
-      const voiceId = config.voiceId ?? DEFAULT_VOICES[langCode] ?? "en-US-Wavenet-C";
+      const rawVoiceId = config.voiceId;
+      // Sanitize: if the stored voiceId is not WaveNet or Standard (e.g. Chirp3-HD, Neural2)
+      // replace it with the language-appropriate default so synthesis never fails silently
+      const isValidTier = rawVoiceId && (/wavenet/i.test(rawVoiceId) || /standard/i.test(rawVoiceId));
+      const voiceId = isValidTier
+        ? rawVoiceId!
+        : (DEFAULT_VOICES[langCode] ?? DEFAULT_VOICES["en-US"]);
 
       try {
         const result = await synthesizeMutation.mutateAsync({

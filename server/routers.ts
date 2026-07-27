@@ -143,7 +143,6 @@ export const appRouter = router({
             },
             { role: "user", content: prompt },
           ],
-          response_format: { type: "json_object" },
         });
 
         const rawContent = response.choices[0]?.message?.content ?? "{}";
@@ -152,24 +151,47 @@ export const appRouter = router({
             ? rawContent
             : rawContent.map((c) => (c.type === "text" ? c.text : "")).join("");
 
-        let parsed: { title?: string; paragraphs?: string[] };
-        try {
-          // 1. Strip markdown code fences if present
-          let jsonStr = raw.trim();
-          const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-          if (fenceMatch) jsonStr = fenceMatch[1].trim();
-
-          // 2. Extract the first {...} block in case the model added surrounding text
-          if (!jsonStr.startsWith("{")) {
-            const braceStart = jsonStr.indexOf("{");
-            const braceEnd = jsonStr.lastIndexOf("}");
-            if (braceStart !== -1 && braceEnd > braceStart) {
-              jsonStr = jsonStr.slice(braceStart, braceEnd + 1);
-            }
+        // Helper: extract JSON object from any surrounding text/fences
+        function extractJson(text: string): { title?: string; paragraphs?: string[] } | null {
+          let s = text.trim();
+          // Strip opening/closing backtick fences (with or without closing fence)
+          s = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+          // Find the first { ... } block
+          const start = s.indexOf("{");
+          const end = s.lastIndexOf("}");
+          if (start === -1 || end <= start) return null;
+          try {
+            return JSON.parse(s.slice(start, end + 1));
+          } catch {
+            return null;
           }
+        }
 
-          parsed = JSON.parse(jsonStr);
-        } catch {
+        let parsed: { title?: string; paragraphs?: string[] } | null = extractJson(raw);
+
+        // If first attempt failed (e.g. model returned only backticks), retry with a direct prompt
+        if (!parsed || !Array.isArray(parsed.paragraphs) || parsed.paragraphs.length === 0) {
+          const retryResponse = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "Output ONLY valid JSON. No markdown. No backticks. Start with {.",
+              },
+              {
+                role: "user",
+                content: `${prompt}\n\nIMPORTANT: Your response must be ONLY a JSON object starting with { and ending with }. No code blocks.`,
+              },
+            ],
+          });
+          const retryContent = retryResponse.choices[0]?.message?.content ?? "{}";
+          const retryRaw: string =
+            typeof retryContent === "string"
+              ? retryContent
+              : retryContent.map((c: { type: string; text?: string }) => (c.type === "text" ? c.text ?? "" : "")).join("");
+          parsed = extractJson(retryRaw);
+        }
+
+        if (!parsed) {
           parsed = { title: "A Dreamy Tale", paragraphs: [raw] };
         }
 

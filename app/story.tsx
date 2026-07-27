@@ -53,6 +53,11 @@ export default function StoryScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const synthesizeMutation = trpc.tts.synthesize.useMutation();
+  const communityPostMutation = trpc.community.post.useMutation({
+    onSuccess: () => Alert.alert("Shared! 🌟", "Your story has been posted to the community."),
+    onError: () => Alert.alert("Error", "Could not share to community."),
+  });
+  const [isSharedToCommunity, setIsSharedToCommunity] = useState(false);
 
   useEffect(() => {
     if (params.storyData) {
@@ -251,6 +256,25 @@ export default function StoryScreen() {
     try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
   };
 
+  const handleShareToCommunity = () => {
+    if (!story || isSharedToCommunity) return;
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Share to Community?",
+      `Post "${story.title}" so other parents can discover and read it.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Share",
+          onPress: () => {
+            communityPostMutation.mutate({ authorName: "Anonymous", storyJson: story });
+            setIsSharedToCommunity(true);
+          },
+        },
+      ]
+    );
+  };
+
   const handleBack = () => { stopAll(); router.back(); };
 
   const handleSpeedChange = async (s: NarrationSpeed) => {
@@ -305,6 +329,14 @@ export default function StoryScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} onPress={handleShare} activeOpacity={0.7}>
           <IconSymbol name="paperplane.fill" size={18} color="#9B8BB4" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.iconBtn, isSharedToCommunity && { borderColor: "#7BE8A0" }]}
+          onPress={handleShareToCommunity}
+          disabled={isSharedToCommunity}
+          activeOpacity={0.7}
+        >
+          <IconSymbol name="person.2.fill" size={18} color={isSharedToCommunity ? "#7BE8A0" : "#9B8BB4"} />
         </TouchableOpacity>
       </View>
 

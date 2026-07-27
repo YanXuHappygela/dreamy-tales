@@ -6,7 +6,8 @@ describe("Google Cloud TTS API key validation", () => {
     expect(apiKey, "GOOGLE_TTS_API_KEY must be set").toBeTruthy();
 
     const res = await fetch(
-      `https://texttospeech.googleapis.com/v1/voices?key=${apiKey}&languageCode=en-US`
+      `https://texttospeech.googleapis.com/v1/voices?languageCode=en-US`,
+      { headers: { "X-Goog-Api-Key": apiKey! } }
     );
     expect(res.status, `API returned ${res.status} — check the key is valid and Cloud TTS API is enabled`).toBe(200);
 

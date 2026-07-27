@@ -31,11 +31,13 @@ const MAPPING = {
   "trash.fill": "delete",
   "heart.fill": "favorite",
   "star.fill": "star",
+  "arrow.clockwise": "refresh",
   "arrow.left": "arrow-back",
   "xmark": "close",
   "checkmark": "check",
   "wand.and.stars": "auto-awesome",
   "moon.stars.fill": "nights-stay",
+  "person.2.fill": "group",
   "clock.fill": "schedule",
 } as IconMapping;
 

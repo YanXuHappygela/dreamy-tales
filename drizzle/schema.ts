@@ -1,17 +1,7 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -25,4 +15,32 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Community posts — stories shared publicly by users.
+ * Stores the full story JSON so it can be downloaded to any device.
+ */
+export const communityPosts = mysqlTable("community_posts", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Display name of the poster (anonymous-friendly — no auth required) */
+  authorName: varchar("authorName", { length: 80 }).notNull().default("Anonymous"),
+  /** Story title */
+  title: varchar("title", { length: 255 }).notNull(),
+  /** Character used in the story */
+  characterType: varchar("characterType", { length: 80 }).notNull(),
+  /** Story setting */
+  scenario: varchar("scenario", { length: 80 }).notNull(),
+  /** Story style */
+  style: varchar("style", { length: 80 }).notNull(),
+  /** Story language */
+  language: varchar("language", { length: 20 }).notNull().default("English"),
+  /** Story length in minutes */
+  lengthMinutes: int("lengthMinutes").notNull().default(5),
+  /** Full story JSON: { title, paragraphs[], config, generatedAt, id } */
+  storyJson: json("storyJson").notNull(),
+  /** Number of times this story has been downloaded */
+  downloadCount: int("downloadCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CommunityPost = typeof communityPosts.$inferSelect;
+export type InsertCommunityPost = typeof communityPosts.$inferInsert;

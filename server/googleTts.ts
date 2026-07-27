@@ -42,7 +42,9 @@ export async function listGoogleVoices(language: string): Promise<CloudVoiceOpti
   const prefixes = LANG_PREFIXES[language] ?? ["en-"];
 
   // Fetch all voices (no languageCode filter so we get all variants)
-  const res = await fetch(`${GOOGLE_TTS_BASE}/voices?key=${apiKey}`);
+  const res = await fetch(`${GOOGLE_TTS_BASE}/voices`, {
+    headers: { "X-Goog-Api-Key": apiKey },
+  });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Google TTS voices failed: ${res.status} ${err}`);
@@ -123,9 +125,12 @@ export async function synthesizeSpeech(params: {
     },
   };
 
-  const res = await fetch(`${GOOGLE_TTS_BASE}/text:synthesize?key=${apiKey}`, {
+  const res = await fetch(`${GOOGLE_TTS_BASE}/text:synthesize`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": apiKey,
+    },
     body: JSON.stringify(body),
   });
 

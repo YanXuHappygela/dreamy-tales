@@ -63,3 +63,12 @@
 - [x] Fix preview: stop any ongoing speech before starting new preview
 - [x] Auto-select first real voice when language changes
 - [x] Handle web platform gracefully (expo-speech voices not available on web)
+
+## Security & Community (Round 4)
+- [x] Move Google TTS API key from URL query param to Authorization header
+- [x] Add community_posts table to database schema
+- [x] Add server endpoints: community.list, community.post, community.delete
+- [x] Add Community tab to tab bar
+- [x] Build Community screen: browse posted stories with author, date, character, language
+- [x] Add "Share to Community" button on story reading screen
+- [x] Add "Download to My Library" button on community story cards

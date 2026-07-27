@@ -8,6 +8,7 @@ import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
 import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { storagePut } from "./storage.js";
+import * as db from "./db.js";
 
 // Approximate words per minute for a calm, soothing read-aloud voice
 const WORDS_PER_MINUTE = 132;
@@ -252,6 +253,58 @@ export const appRouter = router({
         const { url } = await storagePut(key, audioBuffer, "audio/mpeg");
 
         return { url };
+      }),
+  }),
+
+  // ── Community ───────────────────────────────────────────────────────────────────
+  community: router({
+    /** List the latest community stories (public) */
+    list: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }))
+      .query(async ({ input }) => {
+        const posts = await db.listCommunityPosts(input.limit);
+        return { posts };
+      }),
+
+    /** Share a story to the community (public — no auth required) */
+    post: publicProcedure
+      .input(
+        z.object({
+          authorName: z.string().max(80).default("Anonymous"),
+          storyJson: z.any(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const story = input.storyJson as {
+          title: string;
+          paragraphs: string[];
+          config: {
+            characterType: string;
+            scenario: string;
+            style: string;
+            language: string;
+            lengthMinutes: number;
+          };
+        };
+        const id = await db.createCommunityPost({
+          authorName: input.authorName.trim() || "Anonymous",
+          title: story.title,
+          characterType: story.config.characterType,
+          scenario: story.config.scenario,
+          style: story.config.style,
+          language: story.config.language ?? "English",
+          lengthMinutes: story.config.lengthMinutes ?? 5,
+          storyJson: story,
+        });
+        return { id };
+      }),
+
+    /** Increment download count when a user saves a community story */
+    download: publicProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ input }) => {
+        await db.incrementDownloadCount(input.id);
+        return { ok: true };
       }),
   }),
 });

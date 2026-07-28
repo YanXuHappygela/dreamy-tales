@@ -56,13 +56,20 @@ export default function StoryScreen() {
   const utils = trpc.useUtils();
   const communityPostMutation = trpc.community.post.useMutation({
     onSuccess: () => {
-      // Invalidate the community list cache so it refreshes when the user navigates to that tab
+      setIsSharing(false);
+      // Invalidate cache so Community tab shows the new post immediately
       utils.community.list.invalidate();
-      Alert.alert("Shared! 🌟", "Your story has been posted to the community.");
+      // Navigate to Community tab so user sees the post right away
+      router.push("/(tabs)/community" as any);
     },
-    onError: () => Alert.alert("Error", "Could not share to community."),
+    onError: () => {
+      setIsSharing(false);
+      setIsSharedToCommunity(false);
+      Alert.alert("Error", "Could not share to community. Please try again.");
+    },
   });
   const [isSharedToCommunity, setIsSharedToCommunity] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     if (params.storyData) {
@@ -262,22 +269,13 @@ export default function StoryScreen() {
   };
 
   const handleShareToCommunity = () => {
-    if (!story || isSharedToCommunity) return;
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Share to Community?",
-      `Post "${story.title}" so other parents can discover and read it.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Share",
-          onPress: () => {
-            communityPostMutation.mutate({ authorName: "Anonymous", storyJson: story });
-            setIsSharedToCommunity(true);
-          },
-        },
-      ]
-    );
+    if (!story || isSharedToCommunity || isSharing) return;
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Highlight the button immediately
+    setIsSharedToCommunity(true);
+    setIsSharing(true);
+    // Post to community — on success, navigate to Community tab
+    communityPostMutation.mutate({ authorName: "Anonymous", storyJson: story });
   };
 
   const handleBack = () => { stopAll(); router.back(); };
@@ -336,12 +334,19 @@ export default function StoryScreen() {
           <IconSymbol name="paperplane.fill" size={18} color="#9B8BB4" />
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.iconBtn, isSharedToCommunity && { borderColor: "#7BE8A0" }]}
+          style={[
+            styles.iconBtn,
+            isSharedToCommunity && { borderColor: "#7BE8A0", backgroundColor: "#0D2B1A" },
+          ]}
           onPress={handleShareToCommunity}
-          disabled={isSharedToCommunity}
+          disabled={isSharedToCommunity || isSharing}
           activeOpacity={0.7}
         >
-          <IconSymbol name="person.2.fill" size={18} color={isSharedToCommunity ? "#7BE8A0" : "#9B8BB4"} />
+          <IconSymbol
+            name="person.2.fill"
+            size={18}
+            color={isSharedToCommunity ? "#7BE8A0" : "#9B8BB4"}
+          />
         </TouchableOpacity>
       </View>
 

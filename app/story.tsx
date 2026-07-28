@@ -27,6 +27,7 @@ type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
 const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
 const DEFAULT_SPEED: NarrationSpeed = 0.9;
+const SHARED_IDS_KEY = "dreamy_tales_shared_ids";
 
 export default function StoryScreen() {
   useKeepAwake();
@@ -55,12 +56,20 @@ export default function StoryScreen() {
   const synthesizeMutation = trpc.tts.synthesize.useMutation();
   const utils = trpc.useUtils();
   const communityPostMutation = trpc.community.post.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setIsSharing(false);
-      // Invalidate cache so Community tab shows the new post immediately
+      // Persist this story's ID so it cannot be shared again across sessions
+      if (story) {
+        try {
+          const raw = await AsyncStorage.getItem(SHARED_IDS_KEY);
+          const ids: string[] = raw ? JSON.parse(raw) : [];
+          if (!ids.includes(story.id)) {
+            await AsyncStorage.setItem(SHARED_IDS_KEY, JSON.stringify([...ids, story.id]));
+          }
+        } catch { /**/ }
+      }
+      // Invalidate cache so Community tab shows the new post when user navigates there
       utils.community.list.invalidate();
-      // Navigate to Community tab so user sees the post right away
-      router.push("/(tabs)/community" as any);
     },
     onError: () => {
       setIsSharing(false);
@@ -77,6 +86,13 @@ export default function StoryScreen() {
         const parsed: GeneratedStory = JSON.parse(params.storyData);
         setStory(parsed);
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+        // Check if this story has already been shared to community
+        AsyncStorage.getItem(SHARED_IDS_KEY).then((raw) => {
+          if (raw) {
+            const ids: string[] = JSON.parse(raw);
+            if (ids.includes(parsed.id)) setIsSharedToCommunity(true);
+          }
+        }).catch(() => {});
       } catch { /**/ }
     }
     return () => { stopAll(); };

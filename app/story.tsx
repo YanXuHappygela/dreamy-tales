@@ -68,13 +68,18 @@ export default function StoryScreen() {
           }
         } catch { /**/ }
       }
-      // Invalidate cache so Community tab shows the new post when user navigates there
+      // Invalidate cache so Community tab shows the new post immediately
       utils.community.list.invalidate();
+      // Confirm to the user
+      Alert.alert(
+        "Shared to Community! 🌟",
+        "Your story is now visible in the Community tab for other parents to discover."
+      );
     },
-    onError: () => {
+    onError: (err) => {
       setIsSharing(false);
       setIsSharedToCommunity(false);
-      Alert.alert("Error", "Could not share to community. Please try again.");
+      Alert.alert("Share failed", err.message || "Could not share to community. Please try again.");
     },
   });
   const [isSharedToCommunity, setIsSharedToCommunity] = useState(false);

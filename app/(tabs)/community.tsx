@@ -49,6 +49,8 @@ export default function CommunityScreen() {
   const [selectedStory, setSelectedStory] = useState<SavedStory | null>(null);
   const [savedStories, setSavedStories] = useState<SavedStory[]>([]);
   const [downloadedIds, setDownloadedIds] = useState<Set<number>>(new Set());
+  const [sharedStoryIds, setSharedStoryIds] = useState<Set<string>>(new Set());
+  const SHARED_IDS_KEY = "dreamy_tales_shared_ids";
 
   const { data, isLoading, refetch } = trpc.community.list.useQuery(
     { limit: 50 },
@@ -56,7 +58,19 @@ export default function CommunityScreen() {
   );
 
   const postMutation = trpc.community.post.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Persist the shared story ID so it cannot be shared again
+      if (selectedStory) {
+        try {
+          const raw = await AsyncStorage.getItem(SHARED_IDS_KEY);
+          const ids: string[] = raw ? JSON.parse(raw) : [];
+          if (!ids.includes(selectedStory.id)) {
+            const updated = [...ids, selectedStory.id];
+            await AsyncStorage.setItem(SHARED_IDS_KEY, JSON.stringify(updated));
+            setSharedStoryIds(new Set(updated));
+          }
+        } catch { /**/ }
+      }
       setShareModalVisible(false);
       setSelectedStory(null);
       setAuthorName("");
@@ -71,27 +85,41 @@ export default function CommunityScreen() {
 
   const posts: CommunityPost[] = (data?.posts ?? []) as unknown as CommunityPost[];
 
-  // Refetch community posts and reload saved stories every time this tab gains focus
+  // Refetch community posts, reload saved stories, and load shared IDs every time this tab gains focus
   useFocusEffect(
     useCallback(() => {
       refetch();
       AsyncStorage.getItem(STORIES_STORAGE_KEY).then((raw) => {
         if (raw) setSavedStories(JSON.parse(raw));
       }).catch(() => {});
+      AsyncStorage.getItem(SHARED_IDS_KEY).then((raw) => {
+        if (raw) setSharedStoryIds(new Set(JSON.parse(raw)));
+      }).catch(() => {});
     }, [refetch])
   );
+
+  // Stories that have not yet been shared
+  const unsharableStories = savedStories.filter((s) => !sharedStoryIds.has(s.id));
 
   const handleOpenShareModal = () => {
     if (savedStories.length === 0) {
       Alert.alert("No stories yet", "Generate and save a story first, then share it here.");
       return;
     }
-    setSelectedStory(savedStories[0]);
+    if (unsharableStories.length === 0) {
+      Alert.alert("All shared", "All your saved stories have already been shared to the community.");
+      return;
+    }
+    setSelectedStory(unsharableStories[0]);
     setShareModalVisible(true);
   };
 
   const handleShare = () => {
     if (!selectedStory) return;
+    if (sharedStoryIds.has(selectedStory.id)) {
+      Alert.alert("Already shared", "This story has already been shared to the community.");
+      return;
+    }
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     postMutation.mutate({
       authorName: authorName.trim() || "Anonymous",
@@ -231,10 +259,10 @@ export default function CommunityScreen() {
             <Text style={styles.modalTitle}>Share to Community</Text>
             <Text style={styles.modalSub}>Choose a story to share with other parents</Text>
 
-            {/* Story picker */}
+            {/* Story picker — only shows unshared stories */}
             <Text style={styles.fieldLabel}>Story</Text>
             <View style={styles.storyPickerScroll}>
-              {savedStories.map((s) => (
+              {unsharableStories.map((s) => (
                 <TouchableOpacity
                   key={s.id}
                   style={[styles.storyPickerItem, selectedStory?.id === s.id && styles.storyPickerItemSelected]}

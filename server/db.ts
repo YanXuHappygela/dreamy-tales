@@ -118,3 +118,12 @@ export async function deleteCommunityPost(id: number) {
   if (!db) throw new Error("Database not available");
   await db.delete(communityPosts).where(eq(communityPosts.id, id));
 }
+
+export async function incrementLikeCount(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(communityPosts)
+    .set({ likeCount: sql`${communityPosts.likeCount} + 1` })
+    .where(eq(communityPosts.id, id));
+}

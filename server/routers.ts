@@ -10,6 +10,28 @@ import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { storagePut } from "./storage.js";
 import * as db from "./db.js";
 
+// ── Simple in-memory rate limiter ─────────────────────────────────────────────
+type RateLimitEntry = { count: number; resetAt: number };
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(key: string, maxPerHour: number): boolean {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + 3_600_000 });
+    return true; // allowed
+  }
+  if (entry.count >= maxPerHour) return false; // blocked
+  entry.count++;
+  return true;
+}
+
+function getClientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0].trim();
+  return req.ip ?? "unknown";
+}
+
 // Approximate words per minute for a calm, soothing read-aloud voice
 const WORDS_PER_MINUTE = 132;
 
@@ -127,7 +149,11 @@ export const appRouter = router({
           storyIdea: z.string().max(300).optional(),
         })
       )
-      .mutation(async ({ input }): Promise<GeneratedStory> => {
+      .mutation(async ({ input, ctx }): Promise<GeneratedStory> => {
+        const ip = getClientIp(ctx.req as any);
+        if (!checkRateLimit(`generate:${ip}`, 10)) {
+          throw new Error("Rate limit exceeded. You can generate up to 10 stories per hour.");
+        }
         const config: StoryConfig = {
           ...input,
           language: input.language as StoryConfig["language"],
@@ -274,7 +300,11 @@ export const appRouter = router({
           storyJson: z.any(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        const ip = getClientIp(ctx.req as any);
+        if (!checkRateLimit(`community.post:${ip}`, 5)) {
+          throw new Error("Rate limit exceeded. You can share up to 5 stories per hour.");
+        }
         const story = input.storyJson as {
           title: string;
           paragraphs: string[];
@@ -304,6 +334,14 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int() }))
       .mutation(async ({ input }) => {
         await db.incrementDownloadCount(input.id);
+        return { ok: true };
+      }),
+
+    /** Like a community story */
+    like: publicProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ input }) => {
+        await db.incrementLikeCount(input.id);
         return { ok: true };
       }),
   }),

@@ -72,3 +72,11 @@
 - [x] Build Community screen: browse posted stories with author, date, character, language
 - [x] Add "Share to Community" button on story reading screen
 - [x] Add "Download to My Library" button on community story cards
+
+## Round 5: Likes, Filters, Rate Limiting
+- [x] Add likeCount column to community_posts table
+- [x] Add community.like server endpoint
+- [x] Add heart/like button on community cards with local persistence
+- [x] Add filter bar on Community screen (language, character, style)
+- [x] Add in-memory rate limiting on community.post (max 5/hour per IP)
+- [x] Add in-memory rate limiting on story.generate (max 10/hour per IP)

@@ -39,6 +39,8 @@ export const communityPosts = mysqlTable("community_posts", {
   storyJson: json("storyJson").notNull(),
   /** Number of times this story has been downloaded */
   downloadCount: int("downloadCount").notNull().default(0),
+  /** Number of likes/hearts this story has received */
+  likeCount: int("likeCount").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

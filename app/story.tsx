@@ -53,8 +53,13 @@ export default function StoryScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const synthesizeMutation = trpc.tts.synthesize.useMutation();
+  const utils = trpc.useUtils();
   const communityPostMutation = trpc.community.post.useMutation({
-    onSuccess: () => Alert.alert("Shared! 🌟", "Your story has been posted to the community."),
+    onSuccess: () => {
+      // Invalidate the community list cache so it refreshes when the user navigates to that tab
+      utils.community.list.invalidate();
+      Alert.alert("Shared! 🌟", "Your story has been posted to the community.");
+    },
     onError: () => Alert.alert("Error", "Could not share to community."),
   });
   const [isSharedToCommunity, setIsSharedToCommunity] = useState(false);

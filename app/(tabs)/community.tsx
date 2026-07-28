@@ -52,7 +52,7 @@ export default function CommunityScreen() {
 
   const { data, isLoading, refetch } = trpc.community.list.useQuery(
     { limit: 50 },
-    { staleTime: 30_000 }
+    { staleTime: 0 }  // always refetch when component mounts or tab gains focus
   );
 
   const postMutation = trpc.community.post.useMutation({
@@ -71,13 +71,14 @@ export default function CommunityScreen() {
 
   const posts: CommunityPost[] = (data?.posts ?? []) as unknown as CommunityPost[];
 
-  // Load saved stories for the share picker
+  // Refetch community posts and reload saved stories every time this tab gains focus
   useFocusEffect(
     useCallback(() => {
+      refetch();
       AsyncStorage.getItem(STORIES_STORAGE_KEY).then((raw) => {
         if (raw) setSavedStories(JSON.parse(raw));
       }).catch(() => {});
-    }, [])
+    }, [refetch])
   );
 
   const handleOpenShareModal = () => {

@@ -106,6 +106,7 @@ Requirements:
 - Include a satisfying narrative arc: a small adventure or challenge, and a peaceful resolution
 - Do NOT include scary, violent, or overly exciting content
 - The story should feel cozy and reassuring
+- The main character must have a name that is DIFFERENT from the child's name (${config.childName && config.childName !== "the little one" ? `"${config.childName}"` : "the child's name"}). Give the character a distinct, imaginative name that fits their type (e.g. a bunny named Pip, a dragon named Ember)
 - The VERY LAST paragraph must end with the exact closing line: ${goodNightLine} — this is the final sentence of the story, spoken gently as if tucking the child in
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):

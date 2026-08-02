@@ -150,7 +150,12 @@ export default function StoryScreen() {
         // Stale check after async synthesis
         if (generation !== generationRef.current) return;
 
-        await setAudioModeAsync({ playsInSilentMode: true });
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionModeAndroid: "duckOthers",
+          interruptionMode: "mixWithOthers",
+        });
 
         // Clean up any previous player + listener
         if (listenerRef.current) {

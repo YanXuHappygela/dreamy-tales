@@ -53,6 +53,7 @@ export type ToolChoiceExplicit = {
 export type ToolChoice = ToolChoicePrimitive | ToolChoiceByName | ToolChoiceExplicit;
 
 export type InvokeParams = {
+  model?: string;
   messages: Message[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
@@ -256,6 +257,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
 
   const {
+    model: modelOverride,
     messages,
     tools,
     toolChoice,
@@ -267,7 +269,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: modelOverride ?? "gemini-3-flash-preview",
     messages: messages.map(normalizeMessage),
   };
 

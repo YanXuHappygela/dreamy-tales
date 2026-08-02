@@ -110,7 +110,7 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.settingsBtn} onPress={handleSettings} activeOpacity={0.7}>
-            <IconSymbol name="gearshape.fill" size={22} color={Y} />
+            <IconSymbol name="gearshape.fill" size={22} color="#0D0B2B" />
           </TouchableOpacity>
           <View style={styles.moonContainer}>
             <Text style={styles.moonEmoji}>🌙</Text>
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "transparent", zIndex: 1, elevation: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
   header: { alignItems: "center", paddingVertical: 32, position: "relative" },
-  settingsBtn: { position: "absolute", top: 16, right: 0, width: 40, height: 40, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center", zIndex: 10 },
+  settingsBtn: { position: "absolute", top: 16, right: 0, width: 40, height: 40, borderRadius: 12, backgroundColor: Y, alignItems: "center", justifyContent: "center", zIndex: 10, elevation: 6 },
   moonContainer: { alignItems: "center", marginBottom: 16 },
   moonEmoji: { fontSize: 72, lineHeight: 88 },
   starRow: { flexDirection: "row", gap: 8, marginTop: 4 },

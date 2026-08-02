@@ -15,6 +15,7 @@ import { GeneratedStory, SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 import { trpc } from "@/lib/trpc";
 import { shareStoryAsPdf } from "@/lib/storyPdf";
+import { loadSettings } from "@/app/settings";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -39,6 +40,19 @@ export default function StoryScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isGeneratingAnother, setIsGeneratingAnother] = useState(false);
+
+  const generateAnotherMutation = trpc.story.generate.useMutation({
+    onSuccess: (data: GeneratedStory) => {
+      setIsGeneratingAnother(false);
+      stopAll();
+      router.replace({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
+    },
+    onError: () => {
+      setIsGeneratingAnother(false);
+      Alert.alert("Error", "Could not generate a new story. Please try again.");
+    },
+  });
 
   const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
   const currentParagraphRef = useRef(0);
@@ -263,6 +277,26 @@ export default function StoryScreen() {
 
   const handleBack = () => { stopAll(); router.back(); };
 
+  const handleGenerateAnother = async () => {
+    if (!story || isGeneratingAnother) return;
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setIsGeneratingAnother(true);
+    const settings = await loadSettings();
+    generateAnotherMutation.mutate({
+      childName: settings.childName?.trim() || story.config.childName || "the little one",
+      characterType: story.config.characterType,
+      customCharacter: story.config.customCharacter,
+      scenario: story.config.scenario as any,
+      style: story.config.style as any,
+      lengthMinutes: story.config.lengthMinutes,
+      language: story.config.language ?? settings.language,
+      ageGroup: story.config.ageGroup ?? settings.ageGroup,
+      voiceId: story.config.voiceId ?? settings.voiceId,
+      voiceLanguageCode: story.config.voiceLanguageCode ?? settings.voiceLanguageCode,
+      storyIdea: story.config.storyIdea,
+    });
+  };
+
   const handleSpeedChange = async (s: NarrationSpeed) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSpeed(s);
@@ -417,6 +451,18 @@ export default function StoryScreen() {
             </Text>
           </View>
         </View>
+        {/* Generate Another button */}
+        <TouchableOpacity
+          style={[styles.generateAnotherBtn, isGeneratingAnother && { opacity: 0.65 }]}
+          onPress={handleGenerateAnother}
+          disabled={isGeneratingAnother}
+          activeOpacity={0.8}
+        >
+          <IconSymbol name="arrow.clockwise" size={18} color="#0D0B2B" />
+          <Text style={styles.generateAnotherText}>
+            {isGeneratingAnother ? "Generating…" : "Generate Another"}
+          </Text>
+        </TouchableOpacity>
       </View>
     </ScreenContainer>
   );
@@ -461,4 +507,9 @@ const styles = StyleSheet.create({
   loadingDots: { fontSize: 24, color: "#0D0B2B", fontWeight: "700" },
   statusContainer: { width: 80, alignItems: "flex-end" },
   statusText: { fontSize: 13, color: "#9B8BB4", fontWeight: "500" },
+  generateAnotherBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: Y, borderRadius: 16, paddingVertical: 13, marginTop: 14, elevation: 6,
+  },
+  generateAnotherText: { fontSize: 15, fontWeight: "700", color: "#0D0B2B" },
 });

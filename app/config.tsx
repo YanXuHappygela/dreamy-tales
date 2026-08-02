@@ -1,9 +1,8 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Platform,
+  View, Text, ScrollView, FlatList, TouchableOpacity, TextInput,
+  StyleSheet, Platform, Dimensions, Animated,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
@@ -15,6 +14,10 @@ import { loadSettings } from "@/app/settings";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
+const { width: SCREEN_W } = Dimensions.get("window");
+const CARD_W = 120;
+const CARD_H = 130;
+const CARD_GAP = 14;
 
 const CHARACTER_OPTIONS = [
   { label: "Bunny", emoji: "🐰" }, { label: "Dragon", emoji: "🐉" },
@@ -35,8 +38,65 @@ const STYLE_OPTIONS = [
   { label: "Adventurous", emoji: "🗺️" }, { label: "Cozy", emoji: "🛋️" },
   { label: "Mysterious", emoji: "🔮" }, { label: "Silly", emoji: "🤪" },
 ];
-const LENGTH_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
+const LENGTH_OPTIONS = [
+  { label: "Short", sublabel: "~5 mins", value: 5 },
+  { label: "Mid", sublabel: "~8 mins", value: 8 },
+  { label: "Long", sublabel: "10 mins", value: 10 },
+];
 
+// ── Horizontal swipeable card carousel ──────────────────────────────────────
+interface CardOption { label: string; emoji: string }
+interface CardCarouselProps {
+  options: CardOption[];
+  selected: string;
+  onSelect: (label: string) => void;
+}
+function CardCarousel({ options, selected, onSelect }: CardCarouselProps) {
+  const flatRef = useRef<FlatList>(null);
+  const selectedIdx = options.findIndex((o) => o.label === selected);
+
+  const handlePress = useCallback((label: string, idx: number) => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onSelect(label);
+    flatRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+  }, [onSelect]);
+
+  return (
+    <FlatList
+      ref={flatRef}
+      data={options}
+      keyExtractor={(item) => item.label}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.carouselContent}
+      ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+      initialScrollIndex={Math.max(0, selectedIdx)}
+      getItemLayout={(_, index) => ({
+        length: CARD_W + CARD_GAP,
+        offset: (CARD_W + CARD_GAP) * index,
+        index,
+      })}
+      renderItem={({ item, index }) => {
+        const sel = selected === item.label;
+        return (
+          <TouchableOpacity
+            style={[styles.card, sel && styles.cardSelected]}
+            onPress={() => handlePress(item.label, index)}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.cardEmoji}>{item.emoji}</Text>
+            <Text style={[styles.cardLabel, sel && styles.cardLabelSelected]}>
+              {item.label}
+            </Text>
+            {sel && <View style={styles.cardDot} />}
+          </TouchableOpacity>
+        );
+      }}
+    />
+  );
+}
+
+// ── Main screen ──────────────────────────────────────────────────────────────
 export default function ConfigScreen() {
   const router = useRouter();
   const [characterType, setCharacterType] = useState("Bunny");
@@ -45,9 +105,6 @@ export default function ConfigScreen() {
   const [scenario, setScenario] = useState("Forest");
   const [storyStyle, setStoryStyle] = useState("Magical");
   const [lengthMinutes, setLengthMinutes] = useState(5);
-
-  // Settings loaded from the Settings screen
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsSummary, setSettingsSummary] = useState("");
 
   useEffect(() => {
@@ -59,12 +116,11 @@ export default function ConfigScreen() {
         `🌐 ${s.language}`,
       ].filter(Boolean);
       setSettingsSummary(parts.join("  ·  "));
-      setSettingsLoaded(true);
     });
   }, []);
 
   const generateMutation = trpc.story.generate.useMutation({
-    onSuccess: async (data: GeneratedStory) => {
+    onSuccess: (data: GeneratedStory) => {
       router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
     },
   });
@@ -85,10 +141,6 @@ export default function ConfigScreen() {
       voiceLanguageCode: settings.voiceLanguageCode,
       storyIdea: storyIdea.trim() || undefined,
     });
-  };
-
-  const tap = () => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   if (generateMutation.isPending) {
@@ -117,39 +169,28 @@ export default function ConfigScreen() {
         </View>
 
         {/* Settings summary banner */}
-        {settingsLoaded && (
+        {settingsSummary.length > 0 && (
           <TouchableOpacity
             style={styles.settingsBanner}
             onPress={() => router.push("/settings" as any)}
             activeOpacity={0.8}
           >
-            <Text style={styles.settingsBannerText}>{settingsSummary || "Tap to configure child settings →"}</Text>
+            <Text style={styles.settingsBannerText}>{settingsSummary}</Text>
             <IconSymbol name="gearshape.fill" size={16} color={Y} />
           </TouchableOpacity>
         )}
 
-        {/* Character */}
+        {/* ── Main Character ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Main Character</Text>
-          <View style={styles.optionGrid}>
-            {CHARACTER_OPTIONS.map((opt) => {
-              const sel = characterType === opt.label;
-              return (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.chip, sel && styles.chipSelected]}
-                  onPress={() => { tap(); setCharacterType(opt.label); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
-                  <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <CardCarousel
+            options={CHARACTER_OPTIONS}
+            selected={characterType}
+            onSelect={setCharacterType}
+          />
           {characterType === "Custom" && (
             <TextInput
-              style={[styles.textInput, styles.customCharInput]}
+              style={[styles.textInput, { marginTop: 12, borderColor: Y }]}
               placeholder="Describe your character, e.g. a tiny wizard fox…"
               placeholderTextColor="#4A4270"
               value={customCharacter}
@@ -161,49 +202,27 @@ export default function ConfigScreen() {
           )}
         </View>
 
-        {/* Scenario */}
+        {/* ── Story Setting ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Setting</Text>
-          <View style={styles.optionGrid}>
-            {SCENARIO_OPTIONS.map((opt) => {
-              const sel = scenario === opt.label;
-              return (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.chip, sel && styles.chipSelected]}
-                  onPress={() => { tap(); setScenario(opt.label); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
-                  <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <CardCarousel
+            options={SCENARIO_OPTIONS}
+            selected={scenario}
+            onSelect={setScenario}
+          />
         </View>
 
-        {/* Style */}
+        {/* ── Story Style ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Style</Text>
-          <View style={styles.optionGrid}>
-            {STYLE_OPTIONS.map((opt) => {
-              const sel = storyStyle === opt.label;
-              return (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.chip, sel && styles.chipSelected]}
-                  onPress={() => { tap(); setStoryStyle(opt.label); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.chipEmoji}>{opt.emoji}</Text>
-                  <Text style={[styles.chipLabel, sel && styles.chipLabelSelected]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <CardCarousel
+            options={STYLE_OPTIONS}
+            selected={storyStyle}
+            onSelect={setStoryStyle}
+          />
         </View>
 
-        {/* Story Idea */}
+        {/* ── Story Idea ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>
             Story Idea<Text style={styles.optionalTag}> (optional)</Text>
@@ -223,25 +242,35 @@ export default function ConfigScreen() {
           <Text style={styles.charCount}>{storyIdea.length}/300</Text>
         </View>
 
-        {/* Story Length */}
+        {/* ── Story Length ── */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Story Length</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={lengthMinutes}
-              onValueChange={(val) => { tap(); setLengthMinutes(val as number); }}
-              style={styles.picker}
-              dropdownIconColor={Y}
-              itemStyle={styles.pickerItem}
-            >
-              {LENGTH_OPTIONS.map((min) => (
-                <Picker.Item key={min} label={`${min} minutes`} value={min} color="#F0EAF8" />
-              ))}
-            </Picker>
+          <View style={styles.lengthRow}>
+            {LENGTH_OPTIONS.map((opt) => {
+              const sel = lengthMinutes === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.lengthChip, sel && styles.lengthChipSelected]}
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setLengthMinutes(opt.value);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.lengthLabel, sel && styles.lengthLabelSelected]}>
+                    {opt.label}
+                  </Text>
+                  <Text style={[styles.lengthSub, sel && styles.lengthSubSelected]}>
+                    {opt.sublabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        {/* Generate Button */}
+        {/* ── Generate Button ── */}
         <TouchableOpacity
           style={styles.generateBtn}
           onPress={handleGenerate}
@@ -264,29 +293,43 @@ export default function ConfigScreen() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "#0D0B2B" },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 12 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 16, marginBottom: 8 },
+  scrollContent: { paddingTop: 12 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 16, marginBottom: 4 },
   backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 20, fontWeight: "700", color: "#F0EAF8" },
-  settingsBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: Y, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 24, gap: 8 },
+  settingsBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: Y, paddingHorizontal: 16, paddingVertical: 12, marginHorizontal: 20, marginBottom: 24, gap: 8 },
   settingsBannerText: { flex: 1, fontSize: 13, color: Y, fontWeight: "500" },
   section: { marginBottom: 28 },
-  sectionLabel: { fontSize: 14, fontWeight: "600", color: "#9B8BB4", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
-  textInput: { backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: "#F0EAF8" },
-  customCharInput: { marginTop: 10, borderColor: Y },
-  optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 14, paddingVertical: 10, minWidth: 90 },
-  chipSelected: { borderColor: Y, backgroundColor: Y_DIM },
-  chipEmoji: { fontSize: 18 },
-  chipLabel: { fontSize: 14, fontWeight: "500", color: "#9B8BB4" },
-  chipLabelSelected: { color: Y, fontWeight: "700" },
+  sectionLabel: { fontSize: 14, fontWeight: "600", color: "#9B8BB4", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14, paddingHorizontal: 20 },
+  // Card carousel
+  carouselContent: { paddingHorizontal: 20 },
+  card: {
+    width: CARD_W, height: CARD_H,
+    borderRadius: 20, backgroundColor: "#1A1740",
+    borderWidth: 2, borderColor: "#2E2A5A",
+    alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 12,
+  },
+  cardSelected: { borderColor: Y, backgroundColor: Y_DIM },
+  cardEmoji: { fontSize: 44, lineHeight: 52 },
+  cardLabel: { fontSize: 13, fontWeight: "600", color: "#9B8BB4", textAlign: "center" },
+  cardLabelSelected: { color: Y, fontWeight: "700" },
+  cardDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Y },
+  // Text inputs
+  textInput: { backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: "#F0EAF8", marginHorizontal: 20 },
   storyIdeaInput: { minHeight: 90, textAlignVertical: "top", paddingTop: 14 },
   optionalTag: { fontSize: 12, fontWeight: "400", color: "#4A4270", textTransform: "none", letterSpacing: 0 },
-  charCount: { fontSize: 12, color: "#4A4270", textAlign: "right", marginTop: 6 },
-  pickerWrapper: { backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: Y, overflow: "hidden" },
-  picker: { color: "#F0EAF8", height: Platform.OS === "ios" ? 150 : 52, backgroundColor: "transparent" },
-  pickerItem: { color: "#F0EAF8", fontSize: 16, backgroundColor: "#1A1740" },
-  generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginTop: 8, elevation: 8 },
+  charCount: { fontSize: 12, color: "#4A4270", textAlign: "right", marginTop: 6, marginHorizontal: 20 },
+  // Length chips
+  lengthRow: { flexDirection: "row", gap: 12, paddingHorizontal: 20 },
+  lengthChip: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1A1740", borderRadius: 18, borderWidth: 2, borderColor: "#2E2A5A", paddingVertical: 18 },
+  lengthChipSelected: { borderColor: Y, backgroundColor: Y_DIM },
+  lengthLabel: { fontSize: 17, fontWeight: "700", color: "#9B8BB4" },
+  lengthLabelSelected: { color: Y },
+  lengthSub: { fontSize: 12, color: "#4A4270", marginTop: 4 },
+  lengthSubSelected: { color: "#C8A060" },
+  // Generate button
+  generateBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, marginHorizontal: 20, marginTop: 8, elevation: 8 },
   generateBtnText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
-  errorText: { color: "#F87171", textAlign: "center", marginTop: 12, fontSize: 14 },
+  errorText: { color: "#F87171", textAlign: "center", marginTop: 12, fontSize: 14, marginHorizontal: 20 },
 });

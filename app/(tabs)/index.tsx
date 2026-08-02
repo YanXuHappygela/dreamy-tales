@@ -138,14 +138,9 @@ export default function HomeScreen() {
           activeOpacity={0.8}
         >
           <Text style={styles.surpriseEmoji}>{isSurprising ? "🌙" : "🎲"}</Text>
-          <View>
-            <Text style={styles.surpriseButtonText}>
-              {isSurprising ? "Weaving your story…" : "Surprise Me!"}
-            </Text>
-            <Text style={styles.surpriseButtonSub}>
-              {isSurprising ? "This may take a moment" : "Random story, mid-length, your settings"}
-            </Text>
-          </View>
+          <Text style={styles.surpriseButtonText}>
+            {isSurprising ? "Weaving your story…" : "Surprise Me!"}
+          </Text>
         </TouchableOpacity>
 
         {/* Recent Stories */}
@@ -211,13 +206,12 @@ const styles = StyleSheet.create({
   },
   createButtonText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
   surpriseButton: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    backgroundColor: "#1A1740", borderRadius: 20, paddingVertical: 16, paddingHorizontal: 24,
-    marginBottom: 36, borderWidth: 1.5, borderColor: "#4A3880", elevation: 4,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    backgroundColor: Y, borderRadius: 20, paddingVertical: 18, paddingHorizontal: 32,
+    marginBottom: 36, elevation: 8,
   },
-  surpriseEmoji: { fontSize: 28 },
-  surpriseButtonText: { fontSize: 16, fontWeight: "700", color: "#C8A2E8" },
-  surpriseButtonSub: { fontSize: 12, color: "#4A4270", marginTop: 2 },
+  surpriseEmoji: { fontSize: 22 },
+  surpriseButtonText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: "#F0EAF8", marginBottom: 14 },
   storyCard: {

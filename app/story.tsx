@@ -14,6 +14,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GeneratedStory, SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 import { trpc } from "@/lib/trpc";
+import { shareStoryAsPdf } from "@/lib/storyPdf";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -37,6 +38,7 @@ export default function StoryScreen() {
   const [currentParagraph, setCurrentParagraph] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
   const currentParagraphRef = useRef(0);
@@ -245,10 +247,18 @@ export default function StoryScreen() {
   };
 
   const handleShare = async () => {
-    if (!story) return;
+    if (!story || isGeneratingPdf) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const text = `${story.title}\n\n${story.paragraphs.join("\n\n")}`;
-    try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
+    setIsGeneratingPdf(true);
+    try {
+      await shareStoryAsPdf(story);
+    } catch {
+      // Fall back to plain text share if PDF fails
+      const text = `${story.title}\n\n${story.paragraphs.join("\n\n")}`;
+      try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleBack = () => { stopAll(); router.back(); };
@@ -303,8 +313,16 @@ export default function StoryScreen() {
         >
           <IconSymbol name="heart.fill" size={20} color={isSaved ? "#F87171" : "#9B8BB4"} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} onPress={handleShare} activeOpacity={0.7}>
-          <IconSymbol name="paperplane.fill" size={18} color="#9B8BB4" />
+        <TouchableOpacity
+          style={[styles.iconBtn, isGeneratingPdf && { opacity: 0.5 }]}
+          onPress={handleShare}
+          disabled={isGeneratingPdf}
+          activeOpacity={0.7}
+        >
+          {isGeneratingPdf
+            ? <Text style={{ fontSize: 12, color: Y }}>PDF…</Text>
+            : <IconSymbol name="paperplane.fill" size={18} color="#9B8BB4" />
+          }
         </TouchableOpacity>
       </View>
 

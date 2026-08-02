@@ -54,6 +54,11 @@ export default function HomeScreen() {
     router.push({ pathname: "/story", params: { storyData: JSON.stringify(story) } } as any);
   };
 
+  const handleSettings = () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push("/settings" as any);
+  };
+
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
       <StarfieldBackground />
@@ -64,6 +69,10 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
+          {/* Gear icon top-right */}
+          <TouchableOpacity style={styles.settingsBtn} onPress={handleSettings} activeOpacity={0.7}>
+            <IconSymbol name="gearshape.fill" size={22} color={Y} />
+          </TouchableOpacity>
           <View style={styles.moonContainer}>
             <Text style={styles.moonEmoji}>🌙</Text>
             <View style={styles.starRow}>
@@ -130,7 +139,8 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "transparent", zIndex: 1, elevation: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
-  header: { alignItems: "center", paddingVertical: 32 },
+  header: { alignItems: "center", paddingVertical: 32, position: "relative" },
+  settingsBtn: { position: "absolute", top: 16, right: 0, width: 40, height: 40, borderRadius: 12, backgroundColor: "#1A1740", borderWidth: 1.5, borderColor: Y, alignItems: "center", justifyContent: "center", zIndex: 10 },
   moonContainer: { alignItems: "center", marginBottom: 16 },
   moonEmoji: { fontSize: 72, lineHeight: 88 },
   starRow: { flexDirection: "row", gap: 8, marginTop: 4 },

@@ -39,6 +39,7 @@ const MAPPING = {
   "moon.stars.fill": "nights-stay",
   "person.2.fill": "group",
   "clock.fill": "schedule",
+  "gearshape.fill": "settings",
 } as IconMapping;
 
 /**

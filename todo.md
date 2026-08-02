@@ -80,3 +80,9 @@
 - [x] Add filter bar on Community screen (language, character, style)
 - [x] Add in-memory rate limiting on community.post (max 5/hour per IP)
 - [x] Add in-memory rate limiting on story.generate (max 10/hour per IP)
+
+## Settings Screen (Round 6)
+- [x] Create /settings screen with child name, age group, language, voice preference
+- [x] Add gear icon to Home screen top-right corner
+- [x] Remove child name, age group, language, voice from config screen
+- [x] Config screen reads child name/age/language/voice from Settings AsyncStorage

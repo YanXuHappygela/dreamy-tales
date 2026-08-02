@@ -11,6 +11,8 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { StarfieldBackground } from "@/components/starfield-background";
 import { SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
+import { loadSettings } from "@/app/settings";
+import { trpc } from "@/lib/trpc";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -23,11 +25,21 @@ const CHARACTER_EMOJIS: Record<string, string> = {
 const SCENARIO_EMOJIS: Record<string, string> = {
   Forest: "🌲", Space: "🚀", Ocean: "🌊",
   Castle: "🏰", Jungle: "🌴", "Cloud Kingdom": "☁️",
+  Volcano: "🌋", Desert: "🏜️", Mountain: "⛰️",
 };
+
+const RANDOM_CHARACTERS = ["Bunny", "Dragon", "Princess", "Robot", "Unicorn", "Bear", "Race Car", "Dolphin"];
+const RANDOM_SCENARIOS = ["Forest", "Space", "Ocean", "Castle", "Jungle", "Cloud Kingdom", "Volcano", "Desert", "Mountain"];
+const RANDOM_STYLES = ["Funny", "Magical", "Adventurous", "Cozy", "Mysterious", "Silly"];
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const [recentStories, setRecentStories] = useState<SavedStory[]>([]);
+  const [isSurprising, setIsSurprising] = useState(false);
 
   const loadRecentStories = useCallback(async () => {
     try {
@@ -44,9 +56,37 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { loadRecentStories(); }, [loadRecentStories]));
 
+  const surpriseMutation = trpc.story.generate.useMutation({
+    onSuccess: (data) => {
+      setIsSurprising(false);
+      router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
+    },
+    onError: () => {
+      setIsSurprising(false);
+    },
+  });
+
   const handleCreateStory = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push("/config" as any);
+  };
+
+  const handleSurpriseMe = async () => {
+    if (isSurprising) return;
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setIsSurprising(true);
+    const settings = await loadSettings();
+    surpriseMutation.mutate({
+      childName: settings.childName?.trim() || "the little one",
+      characterType: pick(RANDOM_CHARACTERS),
+      scenario: pick(RANDOM_SCENARIOS) as any,
+      style: pick(RANDOM_STYLES) as any,
+      lengthMinutes: 8, // mid-length
+      language: settings.language,
+      ageGroup: settings.ageGroup,
+      voiceId: settings.voiceId,
+      voiceLanguageCode: settings.voiceLanguageCode,
+    });
   };
 
   const handleOpenStory = (story: SavedStory) => {
@@ -69,7 +109,6 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          {/* Gear icon top-right */}
           <TouchableOpacity style={styles.settingsBtn} onPress={handleSettings} activeOpacity={0.7}>
             <IconSymbol name="gearshape.fill" size={22} color={Y} />
           </TouchableOpacity>
@@ -89,6 +128,24 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.createButton} onPress={handleCreateStory} activeOpacity={0.8}>
           <IconSymbol name="wand.and.stars" size={24} color="#0D0B2B" />
           <Text style={styles.createButtonText}>Create a Story</Text>
+        </TouchableOpacity>
+
+        {/* Surprise Me Button */}
+        <TouchableOpacity
+          style={[styles.surpriseButton, isSurprising && { opacity: 0.65 }]}
+          onPress={handleSurpriseMe}
+          disabled={isSurprising}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.surpriseEmoji}>{isSurprising ? "🌙" : "🎲"}</Text>
+          <View>
+            <Text style={styles.surpriseButtonText}>
+              {isSurprising ? "Weaving your story…" : "Surprise Me!"}
+            </Text>
+            <Text style={styles.surpriseButtonSub}>
+              {isSurprising ? "This may take a moment" : "Random story, mid-length, your settings"}
+            </Text>
+          </View>
         </TouchableOpacity>
 
         {/* Recent Stories */}
@@ -150,9 +207,17 @@ const styles = StyleSheet.create({
   createButton: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     backgroundColor: Y, borderRadius: 20, paddingVertical: 18, paddingHorizontal: 32,
-    marginBottom: 36, elevation: 8,
+    marginBottom: 14, elevation: 8,
   },
   createButtonText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
+  surpriseButton: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "#1A1740", borderRadius: 20, paddingVertical: 16, paddingHorizontal: 24,
+    marginBottom: 36, borderWidth: 1.5, borderColor: "#4A3880", elevation: 4,
+  },
+  surpriseEmoji: { fontSize: 28 },
+  surpriseButtonText: { fontSize: 16, fontWeight: "700", color: "#C8A2E8" },
+  surpriseButtonSub: { fontSize: 12, color: "#4A4270", marginTop: 2 },
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: "#F0EAF8", marginBottom: 14 },
   storyCard: {

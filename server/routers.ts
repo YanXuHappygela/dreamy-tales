@@ -70,6 +70,11 @@ function buildStoryPrompt(config: StoryConfig): string {
       ? `The story is for a child named ${config.childName}.`
       : "";
 
+  const goodNightLine =
+    config.childName && config.childName !== "the little one"
+      ? `"Good night, sweet dreams, ${config.childName}."`
+      : `"Good night, sweet dreams."`;
+
   const storyIdeaClause =
     config.storyIdea?.trim()
       ? `The caregiver has suggested this story idea or plot direction: "${config.storyIdea.trim()}". Incorporate this naturally into the story while keeping it gentle and age-appropriate.`
@@ -101,6 +106,7 @@ Requirements:
 - Include a satisfying narrative arc: a small adventure or challenge, and a peaceful resolution
 - Do NOT include scary, violent, or overly exciting content
 - The story should feel cozy and reassuring
+- The VERY LAST paragraph must end with the exact closing line: ${goodNightLine} — this is the final sentence of the story, spoken gently as if tucking the child in
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {

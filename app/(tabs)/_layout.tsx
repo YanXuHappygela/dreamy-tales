@@ -52,15 +52,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="community"
-        options={{
-          title: "Community",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="star.fill" color={color} />
-          ),
-        }}
-      />
+
     </Tabs>
   );
 }

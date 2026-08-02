@@ -27,7 +27,6 @@ type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
 const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
 const DEFAULT_SPEED: NarrationSpeed = 0.9;
-const SHARED_IDS_KEY = "dreamy_tales_shared_ids";
 
 export default function StoryScreen() {
   useKeepAwake();
@@ -54,36 +53,6 @@ export default function StoryScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const synthesizeMutation = trpc.tts.synthesize.useMutation();
-  const utils = trpc.useUtils();
-  const communityPostMutation = trpc.community.post.useMutation({
-    onSuccess: async () => {
-      setIsSharing(false);
-      // Persist this story's ID so it cannot be shared again across sessions
-      if (story) {
-        try {
-          const raw = await AsyncStorage.getItem(SHARED_IDS_KEY);
-          const ids: string[] = raw ? JSON.parse(raw) : [];
-          if (!ids.includes(story.id)) {
-            await AsyncStorage.setItem(SHARED_IDS_KEY, JSON.stringify([...ids, story.id]));
-          }
-        } catch { /**/ }
-      }
-      // Invalidate cache so Community tab shows the new post immediately
-      utils.community.list.invalidate();
-      // Confirm to the user
-      Alert.alert(
-        "Shared to Community! 🌟",
-        "Your story is now visible in the Community tab for other parents to discover."
-      );
-    },
-    onError: (err) => {
-      setIsSharing(false);
-      setIsSharedToCommunity(false);
-      Alert.alert("Share failed", err.message || "Could not share to community. Please try again.");
-    },
-  });
-  const [isSharedToCommunity, setIsSharedToCommunity] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     if (params.storyData) {
@@ -91,13 +60,6 @@ export default function StoryScreen() {
         const parsed: GeneratedStory = JSON.parse(params.storyData);
         setStory(parsed);
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-        // Check if this story has already been shared to community
-        AsyncStorage.getItem(SHARED_IDS_KEY).then((raw) => {
-          if (raw) {
-            const ids: string[] = JSON.parse(raw);
-            if (ids.includes(parsed.id)) setIsSharedToCommunity(true);
-          }
-        }).catch(() => {});
       } catch { /**/ }
     }
     return () => { stopAll(); };
@@ -289,16 +251,6 @@ export default function StoryScreen() {
     try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
   };
 
-  const handleShareToCommunity = () => {
-    if (!story || isSharedToCommunity || isSharing) return;
-    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Highlight the button immediately
-    setIsSharedToCommunity(true);
-    setIsSharing(true);
-    // Post to community — on success, navigate to Community tab
-    communityPostMutation.mutate({ authorName: "Anonymous", storyJson: story });
-  };
-
   const handleBack = () => { stopAll(); router.back(); };
 
   const handleSpeedChange = async (s: NarrationSpeed) => {
@@ -353,21 +305,6 @@ export default function StoryScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} onPress={handleShare} activeOpacity={0.7}>
           <IconSymbol name="paperplane.fill" size={18} color="#9B8BB4" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.iconBtn,
-            isSharedToCommunity && { borderColor: "#7BE8A0", backgroundColor: "#0D2B1A" },
-          ]}
-          onPress={handleShareToCommunity}
-          disabled={isSharedToCommunity || isSharing}
-          activeOpacity={0.7}
-        >
-          <IconSymbol
-            name="person.2.fill"
-            size={18}
-            color={isSharedToCommunity ? "#7BE8A0" : "#9B8BB4"}
-          />
         </TouchableOpacity>
       </View>
 

@@ -8,7 +8,7 @@ import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
 import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { storagePut } from "./storage.js";
-import * as db from "./db.js";
+
 
 // ── Simple in-memory rate limiter ─────────────────────────────────────────────
 type RateLimitEntry = { count: number; resetAt: number };
@@ -282,69 +282,6 @@ export const appRouter = router({
       }),
   }),
 
-  // ── Community ───────────────────────────────────────────────────────────────────
-  community: router({
-    /** List the latest community stories (public) */
-    list: publicProcedure
-      .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }))
-      .query(async ({ input }) => {
-        const posts = await db.listCommunityPosts(input.limit);
-        return { posts };
-      }),
-
-    /** Share a story to the community (public — no auth required) */
-    post: publicProcedure
-      .input(
-        z.object({
-          authorName: z.string().max(80).default("Anonymous"),
-          storyJson: z.any(),
-        })
-      )
-      .mutation(async ({ input, ctx }) => {
-        const ip = getClientIp(ctx.req as any);
-        if (!checkRateLimit(`community.post:${ip}`, 5)) {
-          throw new Error("Rate limit exceeded. You can share up to 5 stories per hour.");
-        }
-        const story = input.storyJson as {
-          title: string;
-          paragraphs: string[];
-          config: {
-            characterType: string;
-            scenario: string;
-            style: string;
-            language: string;
-            lengthMinutes: number;
-          };
-        };
-        const id = await db.createCommunityPost({
-          authorName: input.authorName.trim() || "Anonymous",
-          title: story.title,
-          characterType: story.config.characterType,
-          scenario: story.config.scenario,
-          style: story.config.style,
-          language: story.config.language ?? "English",
-          lengthMinutes: story.config.lengthMinutes ?? 5,
-          storyJson: story,
-        });
-        return { id };
-      }),
-
-    /** Increment download count when a user saves a community story */
-    download: publicProcedure
-      .input(z.object({ id: z.number().int() }))
-      .mutation(async ({ input }) => {
-        await db.incrementDownloadCount(input.id);
-        return { ok: true };
-      }),
-
-    /** Like a community story */
-    like: publicProcedure
-      .input(z.object({ id: z.number().int() }))
-      .mutation(async ({ input }) => {
-        await db.incrementLikeCount(input.id);
-        return { ok: true };
-      }),
-  }),
 });
 
 export type AppRouter = typeof appRouter;

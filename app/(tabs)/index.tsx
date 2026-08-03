@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, Alert,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -40,18 +40,18 @@ function pick<T>(arr: T[]): T {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const [recentStories, setRecentStories] = useState<SavedStory[]>([]);
   const [isSurprising, setIsSurprising] = useState(false);
 
-  // Daily usage query — only runs when authenticated
+  // Usage counter — only meaningful for logged-in users
   const { data: usageData, refetch: refetchUsage } = trpc.story.usage.useQuery(undefined, {
     enabled: isAuthenticated,
     staleTime: 0,
   });
   const storiesUsed = usageData?.count ?? 0;
   const storiesRemaining = usageData?.remaining ?? FREE_LIMIT;
-  const limitReached = storiesUsed >= FREE_LIMIT;
+  const limitReached = isAuthenticated && storiesUsed >= FREE_LIMIT;
 
   const loadRecentStories = useCallback(async () => {
     try {
@@ -74,27 +74,42 @@ export default function HomeScreen() {
   const surpriseMutation = trpc.story.generate.useMutation({
     onSuccess: (data) => {
       setIsSurprising(false);
-      refetchUsage();
+      if (isAuthenticated) refetchUsage();
       router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
     },
     onError: (err) => {
       setIsSurprising(false);
-      if ((err as any)?.data?.code === "UNAUTHORIZED") {
-        router.push("/login" as any);
-      }
+      handleGenerationError(err);
     },
   });
 
+  const handleGenerationError = (err: unknown) => {
+    const msg = (err as any)?.message ?? "";
+    if (msg.startsWith("LIMIT_REACHED_GUEST:")) {
+      // Guest hit the limit — prompt to sign in
+      Alert.alert(
+        "Daily limit reached 🌙",
+        "You've used your 3 free stories today.\n\nSign in to keep track of your stories and come back tomorrow for more!",
+        [
+          { text: "Not now", style: "cancel" },
+          { text: "Sign in", onPress: () => router.push("/login" as any) },
+        ]
+      );
+    } else if (msg.startsWith("LIMIT_REACHED:")) {
+      Alert.alert("Daily limit reached 🌙", msg.replace("LIMIT_REACHED:", "").trim());
+    } else {
+      Alert.alert("Error", msg || "Something went wrong. Please try again.");
+    }
+  };
+
   const handleCreateStory = () => {
-    if (!isAuthenticated) { router.push("/login" as any); return; }
-    if (limitReached) { showLimitAlert(); return; }
+    if (limitReached) { handleLimitReached(); return; }
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push("/config" as any);
   };
 
   const handleSurpriseMe = async () => {
-    if (!isAuthenticated) { router.push("/login" as any); return; }
-    if (limitReached) { showLimitAlert(); return; }
+    if (limitReached) { handleLimitReached(); return; }
     if (isSurprising) return;
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setIsSurprising(true);
@@ -112,9 +127,12 @@ export default function HomeScreen() {
     });
   };
 
-  const showLimitAlert = () => {
+  const handleLimitReached = () => {
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    alert("Daily limit reached\n\nFree users can generate 3 stories per day. Come back tomorrow for more magical stories! 🌙");
+    Alert.alert(
+      "Daily limit reached 🌙",
+      `Free users can generate ${FREE_LIMIT} stories per day. Come back tomorrow for more magical stories!`
+    );
   };
 
   const handleOpenStory = (story: SavedStory) => {
@@ -126,46 +144,6 @@ export default function HomeScreen() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push("/settings" as any);
   };
-
-  // Show loading spinner while auth is resolving
-  if (authLoading) {
-    return (
-      <ScreenContainer containerClassName="bg-background">
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0D0B2B" }}>
-          <Text style={{ fontSize: 48, marginBottom: 16 }}>🌙</Text>
-          <ActivityIndicator size="large" color={Y} />
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  // Not logged in — show login prompt
-  if (!isAuthenticated) {
-    return (
-      <ScreenContainer containerClassName="bg-background">
-        <StarfieldBackground />
-        <View style={styles.loginPrompt}>
-          <Text style={styles.moonEmoji}>🌙</Text>
-          <View style={styles.starRow}>
-            <Text style={styles.starEmoji}>✨</Text>
-            <Text style={styles.starEmoji}>⭐</Text>
-            <Text style={styles.starEmoji}>✨</Text>
-          </View>
-          <Text style={styles.appTitle}>Dreamy Tales</Text>
-          <Text style={styles.appSubtitle}>Magical bedtime stories, just for you</Text>
-          <TouchableOpacity
-            style={styles.loginBtn}
-            onPress={() => router.push("/login" as any)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.loginBtnIcon}>G</Text>
-            <Text style={styles.loginBtnText}>Sign in with Google</Text>
-          </TouchableOpacity>
-          <Text style={styles.loginNote}>Free: 3 stories per day</Text>
-        </View>
-      </ScreenContainer>
-    );
-  }
 
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
@@ -192,22 +170,21 @@ export default function HomeScreen() {
           <Text style={styles.appSubtitle}>Magical bedtime stories, just for you</Text>
         </View>
 
-        {/* Usage counter */}
-        <View style={[styles.usageBanner, limitReached && styles.usageBannerLimit]}>
-          <View style={styles.usageDots}>
-            {Array.from({ length: FREE_LIMIT }).map((_, i) => (
-              <View
-                key={i}
-                style={[styles.usageDot, i < storiesUsed && styles.usageDotFilled]}
-              />
-            ))}
+        {/* Usage counter — only shown for logged-in users */}
+        {isAuthenticated && (
+          <View style={[styles.usageBanner, limitReached && styles.usageBannerLimit]}>
+            <View style={styles.usageDots}>
+              {Array.from({ length: FREE_LIMIT }).map((_, i) => (
+                <View key={i} style={[styles.usageDot, i < storiesUsed && styles.usageDotFilled]} />
+              ))}
+            </View>
+            <Text style={[styles.usageText, limitReached && styles.usageTextLimit]}>
+              {limitReached
+                ? "Daily limit reached — come back tomorrow 🌙"
+                : `${storiesRemaining} stor${storiesRemaining === 1 ? "y" : "ies"} remaining today`}
+            </Text>
           </View>
-          <Text style={[styles.usageText, limitReached && styles.usageTextLimit]}>
-            {limitReached
-              ? "Daily limit reached — come back tomorrow 🌙"
-              : `${storiesRemaining} stor${storiesRemaining === 1 ? "y" : "ies"} remaining today`}
-          </Text>
-        </View>
+        )}
 
         {/* Create Story Button */}
         <TouchableOpacity
@@ -232,14 +209,24 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* User info + logout */}
-        {user && (
+        {/* Sign in / user row */}
+        {isAuthenticated ? (
           <View style={styles.userRow}>
-            <Text style={styles.userName}>👤 {user.name ?? user.email ?? "Signed in"}</Text>
+            <Text style={styles.userName}>👤 {user?.name ?? user?.email ?? "Signed in"}</Text>
             <TouchableOpacity onPress={logout} activeOpacity={0.7}>
               <Text style={styles.logoutText}>Sign out</Text>
             </TouchableOpacity>
           </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.signInRow}
+            onPress={() => router.push("/login" as any)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.signInText}>
+              Sign in to track your daily stories →
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* Recent Stories */}
@@ -289,13 +276,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "transparent", zIndex: 1, elevation: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
-  // Login prompt (unauthenticated)
-  loginPrompt: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, backgroundColor: "#0D0B2B" },
-  loginBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: Y, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32, marginTop: 32, marginBottom: 12, elevation: 6, width: "100%" },
-  loginBtnIcon: { fontSize: 18, fontWeight: "800", color: "#0D0B2B" },
-  loginBtnText: { fontSize: 16, fontWeight: "700", color: "#0D0B2B" },
-  loginNote: { fontSize: 13, color: "#4A4270" },
-  // Header
   header: { alignItems: "center", paddingVertical: 32, position: "relative" },
   settingsBtn: { position: "absolute", top: 16, right: 0, width: 40, height: 40, borderRadius: 12, backgroundColor: Y, alignItems: "center", justifyContent: "center", zIndex: 10, elevation: 6 },
   moonContainer: { alignItems: "center", marginBottom: 16 },
@@ -304,7 +284,6 @@ const styles = StyleSheet.create({
   starEmoji: { fontSize: 20 },
   appTitle: { fontSize: 34, fontWeight: "800", color: "#F0EAF8", letterSpacing: 0.5, marginBottom: 8 },
   appSubtitle: { fontSize: 16, color: "#9B8BB4", textAlign: "center", lineHeight: 22 },
-  // Usage banner
   usageBanner: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#1A1740", borderRadius: 14, borderWidth: 1.5, borderColor: "#2E2A5A", paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16 },
   usageBannerLimit: { borderColor: "#F87171", backgroundColor: "#2B1020" },
   usageDots: { flexDirection: "row", gap: 6 },
@@ -312,18 +291,17 @@ const styles = StyleSheet.create({
   usageDotFilled: { backgroundColor: Y, borderColor: Y },
   usageText: { flex: 1, fontSize: 13, color: "#9B8BB4", fontWeight: "500" },
   usageTextLimit: { color: "#F87171" },
-  // Buttons
   createButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, paddingHorizontal: 32, marginBottom: 14, elevation: 8 },
   createButtonDisabled: { opacity: 0.45 },
   createButtonText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
   surpriseButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: Y, borderRadius: 20, paddingVertical: 18, paddingHorizontal: 32, marginBottom: 20, elevation: 8 },
   surpriseEmoji: { fontSize: 22 },
   surpriseButtonText: { fontSize: 18, fontWeight: "700", color: "#0D0B2B" },
-  // User row
   userRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24, paddingHorizontal: 4 },
   userName: { fontSize: 13, color: "#9B8BB4" },
   logoutText: { fontSize: 13, color: "#F87171", fontWeight: "600" },
-  // Stories
+  signInRow: { alignItems: "center", marginBottom: 24 },
+  signInText: { fontSize: 13, color: "#9B8BB4", textDecorationLine: "underline" },
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 20, fontWeight: "700", color: "#F0EAF8", marginBottom: 14 },
   storyCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#1A1740", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1.5, borderColor: Y },

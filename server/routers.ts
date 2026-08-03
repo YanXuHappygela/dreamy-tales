@@ -136,7 +136,7 @@ export const appRouter = router({
 
   // ── Story generation ─────────────────────────────────────────────────────────
   story: router({
-    generate: protectedProcedure
+    generate: publicProcedure
       .input(
         z.object({
           childName: z.string().max(50).default("the little one"),
@@ -158,10 +158,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }): Promise<GeneratedStory> => {
-        // Enforce daily story limit for free users
-        await db.incrementStoryUsage(ctx.user.id);
-
+        // Enforce daily story limit — works for both guests (by IP) and logged-in users
+        const userId = ctx.user?.id ?? null;
         const ip = getClientIp(ctx.req as any);
+        await db.incrementStoryUsage(userId, ip);
+
         if (!checkRateLimit(`generate:${ip}`, 10)) {
           throw new Error("Rate limit exceeded. You can generate up to 10 stories per hour.");
         }
@@ -251,10 +252,16 @@ export const appRouter = router({
         };
       }),
 
-    /** Get today's story usage count for the logged-in user */
-    usage: protectedProcedure.query(async ({ ctx }) => {
-      const count = await db.getStoryUsageToday(ctx.user.id);
-      return { count, limit: 3, remaining: Math.max(0, 3 - count) };
+    /** Get today's story usage count — works for guests and logged-in users */
+    usage: publicProcedure.query(async ({ ctx }) => {
+      const userId = ctx.user?.id ?? null;
+      const ip = getClientIp(ctx.req as any);
+      let count = 0;
+      if (userId !== null) {
+        count = await db.getStoryUsageToday(userId);
+      }
+      // For guests, we don't expose the count (no persistent session on client)
+      return { count, limit: db.FREE_DAILY_LIMIT, remaining: Math.max(0, db.FREE_DAILY_LIMIT - count), isGuest: userId === null };
     }),
   }),
 

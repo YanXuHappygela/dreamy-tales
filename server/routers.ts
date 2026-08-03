@@ -2,7 +2,8 @@ import { z } from "zod";
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { publicProcedure, router } from "./_core/trpc.js";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc.js";
+import * as db from "./db.js";
 import { invokeLLM } from "./_core/llm.js";
 import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
@@ -135,7 +136,7 @@ export const appRouter = router({
 
   // ── Story generation ─────────────────────────────────────────────────────────
   story: router({
-    generate: publicProcedure
+    generate: protectedProcedure
       .input(
         z.object({
           childName: z.string().max(50).default("the little one"),
@@ -157,6 +158,9 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }): Promise<GeneratedStory> => {
+        // Enforce daily story limit for free users
+        await db.incrementStoryUsage(ctx.user.id);
+
         const ip = getClientIp(ctx.req as any);
         if (!checkRateLimit(`generate:${ip}`, 10)) {
           throw new Error("Rate limit exceeded. You can generate up to 10 stories per hour.");
@@ -246,6 +250,12 @@ export const appRouter = router({
           generatedAt: new Date().toISOString(),
         };
       }),
+
+    /** Get today's story usage count for the logged-in user */
+    usage: protectedProcedure.query(async ({ ctx }) => {
+      const count = await db.getStoryUsageToday(ctx.user.id);
+      return { count, limit: 3, remaining: Math.max(0, 3 - count) };
+    }),
   }),
 
   // ── Google Cloud TTS ─────────────────────────────────────────────────────────

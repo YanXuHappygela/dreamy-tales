@@ -46,3 +46,18 @@ export const communityPosts = mysqlTable("community_posts", {
 
 export type CommunityPost = typeof communityPosts.$inferSelect;
 export type InsertCommunityPost = typeof communityPosts.$inferInsert;
+
+/**
+ * Daily story usage tracking per user.
+ * One row per user per UTC date. Incremented on each story generation.
+ */
+export const storyUsage = mysqlTable("story_usage", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** UTC date string YYYY-MM-DD */
+  date: varchar("date", { length: 10 }).notNull(),
+  count: int("count").notNull().default(0),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type StoryUsage = typeof storyUsage.$inferSelect;

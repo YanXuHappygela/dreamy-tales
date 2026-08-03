@@ -15,6 +15,13 @@
       "when": 1785189464287,
       "tag": "0001_robust_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1785723111111,
+      "tag": "0002_milky_arachne",
+      "breakpoints": true
     }
   ]
 }

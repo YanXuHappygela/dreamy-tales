@@ -1,6 +1,6 @@
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, communityPosts, InsertCommunityPost } from "../drizzle/schema";
+import { InsertUser, users, communityPosts, InsertCommunityPost, storyUsage } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -117,6 +117,60 @@ export async function deleteCommunityPost(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(communityPosts).where(eq(communityPosts.id, id));
+}
+
+// ── Story Usage (daily limit) ────────────────────────────────────────────
+
+const FREE_DAILY_LIMIT = 3;
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+export async function getStoryUsageToday(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select()
+    .from(storyUsage)
+    .where(and(eq(storyUsage.userId, userId), eq(storyUsage.date, todayUtc())))
+    .limit(1);
+  return rows[0]?.count ?? 0;
+}
+
+/**
+ * Increment today's story count for a user.
+ * Returns the new count after increment.
+ * Throws if the daily limit is exceeded.
+ */
+export async function incrementStoryUsage(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const today = todayUtc();
+
+  // Upsert: insert or increment
+  await db
+    .insert(storyUsage)
+    .values({ userId, date: today, count: 1 })
+    .onDuplicateKeyUpdate({ set: { count: sql`${storyUsage.count} + 1` } });
+
+  const rows = await db
+    .select()
+    .from(storyUsage)
+    .where(and(eq(storyUsage.userId, userId), eq(storyUsage.date, today)))
+    .limit(1);
+  const newCount = rows[0]?.count ?? 1;
+
+  if (newCount > FREE_DAILY_LIMIT) {
+    // Roll back the increment
+    await db
+      .update(storyUsage)
+      .set({ count: sql`${storyUsage.count} - 1` })
+      .where(and(eq(storyUsage.userId, userId), eq(storyUsage.date, today)));
+    throw new Error(`Daily limit reached. Free users can generate ${FREE_DAILY_LIMIT} stories per day.`);
+  }
+
+  return newCount;
 }
 
 export async function incrementLikeCount(id: number) {

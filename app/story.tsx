@@ -23,8 +23,16 @@ const Y_DIM = "#3D3010";
 const LANGUAGE_CODES: Record<string, string> = {
   English: "en-US", Mandarin: "zh-CN", Spanish: "es-ES",
 };
+const DEFAULT_VOICES: Record<string, string> = {
+  "en-US": "en-US-Wavenet-C",
+  "en-GB": "en-GB-Wavenet-A",
+  "zh-CN": "cmn-CN-Wavenet-A",
+  "cmn-CN": "cmn-CN-Wavenet-A",
+  "es-ES": "es-ES-Wavenet-B",
+  "es-US": "es-US-Wavenet-A",
+};
 
-type PlayState = "idle" | "playing" | "paused" | "loading" | "done";
+type PlayState = "idle" | "synthesizing" | "playing" | "paused" | "done";
 type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
 const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
@@ -41,6 +49,20 @@ export default function StoryScreen() {
   const [speed, setSpeed] = useState<NarrationSpeed>(DEFAULT_SPEED);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isGeneratingAnother, setIsGeneratingAnother] = useState(false);
+  const [synthProgress, setSynthProgress] = useState(0); // 0-100 during pre-synthesis
+
+  const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
+  const currentParagraphRef = useRef(0);
+  const audioPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const listenerRef = useRef<{ remove: () => void } | null>(null);
+  // Pre-synthesized audio URLs for all paragraphs — filled before playback starts
+  const audioUrlsRef = useRef<string[]>([]);
+  const generationRef = useRef(0);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const synthesizeMutation = trpc.tts.synthesize.useMutation();
 
   const generateAnotherMutation = trpc.story.generate.useMutation({
     onSuccess: (data: GeneratedStory) => {
@@ -54,22 +76,6 @@ export default function StoryScreen() {
     },
   });
 
-  const speedRef = useRef<NarrationSpeed>(DEFAULT_SPEED);
-  const currentParagraphRef = useRef(0);
-  const audioPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const listenerRef = useRef<{ remove: () => void } | null>(null);
-
-  /**
-   * Generation counter — incremented on every stop/start.
-   * Any in-flight async work checks this before proceeding.
-   */
-  const generationRef = useRef(0);
-
-  const scrollRef = useRef<ScrollView>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  const synthesizeMutation = trpc.tts.synthesize.useMutation();
-
   useEffect(() => {
     if (params.storyData) {
       try {
@@ -81,15 +87,13 @@ export default function StoryScreen() {
     return () => { stopAll(); };
   }, [params.storyData, fadeAnim]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Atomically stop everything and invalidate any in-flight chain. */
+  /** Stop audio and invalidate any in-flight chain. */
   const stopAll = useCallback(() => {
     generationRef.current += 1;
-    // Remove event listener first
     if (listenerRef.current) {
       try { listenerRef.current.remove(); } catch { /**/ }
       listenerRef.current = null;
     }
-    // Pause then remove the audio player so audio stops immediately
     if (audioPlayerRef.current) {
       try { audioPlayerRef.current.pause(); } catch { /**/ }
       try { audioPlayerRef.current.remove(); } catch { /**/ }
@@ -97,16 +101,56 @@ export default function StoryScreen() {
     }
   }, []);
 
-  const speakParagraph = useCallback(
-    async (
-      index: number,
-      paragraphs: string[],
-      config: GeneratedStory["config"],
-      generation: number
-    ) => {
+  /** Resolve voice ID from config, sanitising away non-WaveNet/Standard voices. */
+  const resolveVoice = (config: GeneratedStory["config"]) => {
+    const langCode = config.voiceLanguageCode ?? LANGUAGE_CODES[config.language ?? "English"] ?? "en-US";
+    const raw = config.voiceId;
+    const valid = raw && (/wavenet/i.test(raw) || /standard/i.test(raw));
+    const voiceId = valid ? raw! : (DEFAULT_VOICES[langCode] ?? DEFAULT_VOICES["en-US"]);
+    return { langCode, voiceId };
+  };
+
+  /**
+   * Pre-synthesize ALL paragraphs sequentially before playback starts.
+   * Returns an array of audio URLs, one per paragraph.
+   * Runs network calls while the screen is still on, so background mode is not needed here.
+   */
+  const preSynthesizeAll = useCallback(
+    async (paragraphs: string[], config: GeneratedStory["config"], generation: number): Promise<string[]> => {
+      const { langCode, voiceId } = resolveVoice(config);
+      const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+      const urls: string[] = [];
+
+      for (let i = 0; i < paragraphs.length; i++) {
+        if (generation !== generationRef.current) return [];
+        setSynthProgress(Math.round((i / paragraphs.length) * 100));
+
+        const result = await synthesizeMutation.mutateAsync({
+          text: paragraphs[i],
+          voiceId,
+          languageCode: langCode,
+          speakingRate: speedRef.current,
+        });
+
+        const url = result.url.startsWith("http") ? result.url : `${apiBase}${result.url}`;
+        urls.push(url);
+      }
+      setSynthProgress(100);
+      return urls;
+    },
+    [synthesizeMutation] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  /**
+   * Play paragraph at `index` using the pre-synthesized URL.
+   * No network calls — pure local/remote file playback.
+   * When done, automatically advances to the next paragraph.
+   */
+  const playParagraph = useCallback(
+    (index: number, urls: string[], generation: number) => {
       if (generation !== generationRef.current) return;
 
-      if (index >= paragraphs.length) {
+      if (index >= urls.length) {
         setPlayState("done");
         setCurrentParagraph(0);
         currentParagraphRef.current = 0;
@@ -115,139 +159,106 @@ export default function StoryScreen() {
 
       setCurrentParagraph(index);
       currentParagraphRef.current = index;
-      setPlayState("loading");
 
-      const langCode =
-        config.voiceLanguageCode ??
-        LANGUAGE_CODES[config.language ?? "English"] ??
-        "en-US";
-
-      // Default voices per language code (always WaveNet/Standard — safe for all sessions)
-      const DEFAULT_VOICES: Record<string, string> = {
-        "en-US": "en-US-Wavenet-C",
-        "en-GB": "en-GB-Wavenet-A",
-        "zh-CN": "cmn-CN-Wavenet-A",
-        "cmn-CN": "cmn-CN-Wavenet-A",
-        "es-ES": "es-ES-Wavenet-B",
-        "es-US": "es-US-Wavenet-A",
-      };
-      const rawVoiceId = config.voiceId;
-      // Sanitize: if the stored voiceId is not WaveNet or Standard (e.g. Chirp3-HD, Neural2)
-      // replace it with the language-appropriate default so synthesis never fails silently
-      const isValidTier = rawVoiceId && (/wavenet/i.test(rawVoiceId) || /standard/i.test(rawVoiceId));
-      const voiceId = isValidTier
-        ? rawVoiceId!
-        : (DEFAULT_VOICES[langCode] ?? DEFAULT_VOICES["en-US"]);
-
-      try {
-        const result = await synthesizeMutation.mutateAsync({
-          text: paragraphs[index],
-          voiceId,
-          languageCode: langCode,
-          speakingRate: speedRef.current,
-        });
-
-        // Stale check after async synthesis
-        if (generation !== generationRef.current) return;
-
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-          interruptionModeAndroid: "duckOthers",
-          interruptionMode: "mixWithOthers",
-        });
-
-        // Clean up any previous player + listener
-        if (listenerRef.current) {
-          try { listenerRef.current.remove(); } catch { /**/ }
-          listenerRef.current = null;
-        }
-        if (audioPlayerRef.current) {
-          try { audioPlayerRef.current.remove(); } catch { /**/ }
-          audioPlayerRef.current = null;
-        }
-
-        // Stale check again after cleanup
-        if (generation !== generationRef.current) return;
-
-        const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
-        const audioUrl = result.url.startsWith("http")
-          ? result.url
-          : `${apiBase}${result.url}`;
-
-        const player = createAudioPlayer({ uri: audioUrl });
-        audioPlayerRef.current = player;
-
-        // Use didJustFinish event — fires exactly once when playback ends.
-        // This replaces the polling loop that caused the double-voice bug on Android.
-        let didFinishFired = false;
-        const subscription = player.addListener("playbackStatusUpdate", (status) => {
-          if (generation !== generationRef.current) {
-            subscription.remove();
-            return;
-          }
-          if (status.didJustFinish && !didFinishFired) {
-            didFinishFired = true;
-            subscription.remove();
-            if (listenerRef.current === subscription) listenerRef.current = null;
-            try { player.remove(); } catch { /**/ }
-            if (audioPlayerRef.current === player) audioPlayerRef.current = null;
-            // Advance to next paragraph
-            speakParagraph(index + 1, paragraphs, config, generation);
-          }
-        });
-        listenerRef.current = subscription;
-
-        setPlayState("playing");
-        player.play();
-
-      } catch (err) {
-        if (generation === generationRef.current) {
-          setPlayState("idle");
-          Alert.alert(
-            "Narration error",
-            `Could not load audio for paragraph ${index + 1}. Please check your internet connection and try again.\n\n${String(err)}`
-          );
-        }
+      // Clean up previous player
+      if (listenerRef.current) {
+        try { listenerRef.current.remove(); } catch { /**/ }
+        listenerRef.current = null;
       }
+      if (audioPlayerRef.current) {
+        try { audioPlayerRef.current.remove(); } catch { /**/ }
+        audioPlayerRef.current = null;
+      }
+
+      if (generation !== generationRef.current) return;
+
+      const player = createAudioPlayer({ uri: urls[index] });
+      audioPlayerRef.current = player;
+
+      let didFinishFired = false;
+      const subscription = player.addListener("playbackStatusUpdate", (status) => {
+        if (generation !== generationRef.current) {
+          subscription.remove();
+          return;
+        }
+        if (status.didJustFinish && !didFinishFired) {
+          didFinishFired = true;
+          subscription.remove();
+          if (listenerRef.current === subscription) listenerRef.current = null;
+          try { player.remove(); } catch { /**/ }
+          if (audioPlayerRef.current === player) audioPlayerRef.current = null;
+          // Advance — no network call needed, URL is already in the array
+          playParagraph(index + 1, urls, generation);
+        }
+      });
+      listenerRef.current = subscription;
+
+      setPlayState("playing");
+      player.play();
     },
-    [synthesizeMutation] // eslint-disable-line react-hooks/exhaustive-deps
+    [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const handlePlay = async () => {
     if (!story) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    if (playState === "playing" || playState === "loading") {
+    if (playState === "playing") {
       stopAll();
       setPlayState("paused");
       return;
     }
 
     if (playState === "paused") {
-      const gen = generationRef.current;
-      speedRef.current = speed;
-      setPlayState("loading");
-      speakParagraph(currentParagraphRef.current, story.paragraphs, story.config, gen);
+      // Resume from current paragraph using already-synthesized URLs
+      const urls = audioUrlsRef.current;
+      if (urls.length > 0) {
+        const gen = generationRef.current;
+        speedRef.current = speed;
+        playParagraph(currentParagraphRef.current, urls, gen);
+      }
       return;
     }
 
-    // idle or done — start from beginning
+    // idle or done — pre-synthesize everything then start playing
     stopAll();
     const gen = generationRef.current;
     setCurrentParagraph(0);
     currentParagraphRef.current = 0;
     speedRef.current = speed;
-    setPlayState("loading");
-    speakParagraph(0, story.paragraphs, story.config, gen);
+    audioUrlsRef.current = [];
+    setSynthProgress(0);
+    setPlayState("synthesizing");
+
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionModeAndroid: "duckOthers",
+        interruptionMode: "mixWithOthers",
+      });
+
+      const urls = await preSynthesizeAll(story.paragraphs, story.config, gen);
+      if (gen !== generationRef.current || urls.length === 0) return;
+
+      audioUrlsRef.current = urls;
+      playParagraph(0, urls, gen);
+    } catch (err) {
+      if (gen === generationRef.current) {
+        setPlayState("idle");
+        Alert.alert("Narration error", "Could not prepare audio. Please check your connection and try again.");
+      }
+    }
   };
 
   const handleStop = () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     stopAll();
+    audioUrlsRef.current = [];
     setPlayState("idle");
     setCurrentParagraph(0);
     currentParagraphRef.current = 0;
+    setSynthProgress(0);
   };
 
   const handleSave = async () => {
@@ -272,7 +283,6 @@ export default function StoryScreen() {
     try {
       await shareStoryAsPdf(story);
     } catch {
-      // Fall back to plain text share if PDF fails
       const text = `${story.title}\n\n${story.paragraphs.join("\n\n")}`;
       try { await Share.share({ message: text, title: story.title }); } catch { /**/ }
     } finally {
@@ -302,18 +312,17 @@ export default function StoryScreen() {
     });
   };
 
-  const handleSpeedChange = async (s: NarrationSpeed) => {
+  const handleSpeedChange = (s: NarrationSpeed) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSpeed(s);
     speedRef.current = s;
-    if ((playState === "playing" || playState === "loading") && story) {
-      const para = currentParagraphRef.current;
+    // Speed change requires re-synthesis — reset to idle so user taps Play again
+    if (playState === "playing" || playState === "paused") {
       stopAll();
-      const gen = generationRef.current;
-      setCurrentParagraph(para);
-      currentParagraphRef.current = para;
-      setPlayState("loading");
-      speakParagraph(para, story.paragraphs, story.config, gen);
+      audioUrlsRef.current = [];
+      setPlayState("idle");
+      setCurrentParagraph(0);
+      currentParagraphRef.current = 0;
     }
   };
 
@@ -332,11 +341,14 @@ export default function StoryScreen() {
   const progress =
     playState === "done"
       ? 1
+      : playState === "synthesizing"
+      ? synthProgress / 100 * 0.15 // show up to 15% during synthesis
       : totalParagraphs > 0
-      ? currentParagraph / totalParagraphs
+      ? 0.15 + (currentParagraph / totalParagraphs) * 0.85
       : 0;
 
-  const isActive = playState === "playing" || playState === "loading";
+  const isActive = playState === "playing";
+  const isBusy = playState === "synthesizing";
 
   return (
     <ScreenContainer containerClassName="bg-background" safeAreaClassName="">
@@ -376,10 +388,10 @@ export default function StoryScreen() {
           <Text style={styles.storyTitle}>{story.title}</Text>
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>
-              {story.config.characterType} • {story.config.scenario} • {story.config.style}
+              {story.config.characterType} · {story.config.scenario} · {story.config.style}
             </Text>
             <Text style={styles.metaText}>
-              🌐 {story.config.language ?? "English"} • 🕐 ~{story.config.lengthMinutes} min
+              🌐 {story.config.language ?? "English"} · 🕐 ~{story.config.lengthMinutes} min
             </Text>
           </View>
           {story.paragraphs.map((para, idx) => (
@@ -399,10 +411,12 @@ export default function StoryScreen() {
 
       {/* Controls */}
       <View style={styles.controls}>
+        {/* Progress bar */}
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
         </View>
 
+        {/* Speed chips */}
         <View style={styles.speedRow}>
           {SPEED_OPTIONS.map((s) => {
             const sel = speed === s;
@@ -421,6 +435,7 @@ export default function StoryScreen() {
           })}
         </View>
 
+        {/* Play / Stop row */}
         <View style={styles.controlRow}>
           <TouchableOpacity
             style={[styles.controlBtn, playState === "idle" && styles.controlBtnDisabled]}
@@ -435,8 +450,13 @@ export default function StoryScreen() {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.playBtn} onPress={handlePlay} activeOpacity={0.85}>
-            {playState === "loading"
+          <TouchableOpacity
+            style={[styles.playBtn, isBusy && { opacity: 0.7 }]}
+            onPress={handlePlay}
+            disabled={isBusy}
+            activeOpacity={0.85}
+          >
+            {isBusy
               ? <Text style={styles.loadingDots}>…</Text>
               : <IconSymbol
                   name={isActive ? "pause.fill" : "play.fill"}
@@ -449,13 +469,14 @@ export default function StoryScreen() {
           <View style={styles.statusContainer}>
             <Text style={styles.statusText}>
               {playState === "idle" && "Tap to read"}
-              {playState === "loading" && "Loading…"}
+              {playState === "synthesizing" && `Preparing ${synthProgress}%`}
               {playState === "playing" && "Reading…"}
               {playState === "paused" && "Paused"}
               {playState === "done" && "The End ✨"}
             </Text>
           </View>
         </View>
+
         {/* Generate Another button */}
         <TouchableOpacity
           style={[styles.generateAnotherBtn, isGeneratingAnother && { opacity: 0.65 }]}

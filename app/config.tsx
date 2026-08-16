@@ -123,11 +123,6 @@ export default function ConfigScreen() {
     onSuccess: (data: GeneratedStory) => {
       router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
     },
-    onError: (err) => {
-      if ((err as any)?.data?.code === "UNAUTHORIZED") {
-        router.push("/login" as any);
-      }
-    },
   });
 
   const handleGenerate = async () => {

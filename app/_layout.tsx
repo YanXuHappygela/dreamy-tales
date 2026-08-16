@@ -70,7 +70,6 @@ export default function RootLayout() {
                     animation: "slide_from_right",
                   }}
                 />
-                <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
               </Stack>
             </GestureHandlerRootView>
           </SafeAreaProvider>

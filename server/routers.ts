@@ -1,31 +1,12 @@
 import { z } from "zod";
-import { COOKIE_NAME } from "../shared/const.js";
-import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc.js";
+import { publicProcedure, router } from "./_core/trpc.js";
 import * as db from "./db.js";
 import { invokeLLM } from "./_core/llm.js";
 import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
 import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { storagePut } from "./storage.js";
-
-
-// ── Simple in-memory rate limiter ─────────────────────────────────────────────
-type RateLimitEntry = { count: number; resetAt: number };
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-function checkRateLimit(key: string, maxPerHour: number): boolean {
-  const now = Date.now();
-  const entry = rateLimitStore.get(key);
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(key, { count: 1, resetAt: now + 3_600_000 });
-    return true; // allowed
-  }
-  if (entry.count >= maxPerHour) return false; // blocked
-  entry.count++;
-  return true;
-}
 
 function getClientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -125,15 +106,6 @@ Each paragraph should be 2–4 sentences. Aim for ${Math.round(wordCount / 60)} 
 
 export const appRouter = router({
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return { success: true } as const;
-    }),
-  }),
-
   // ── Story generation ─────────────────────────────────────────────────────────
   story: router({
     generate: publicProcedure
@@ -158,14 +130,9 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }): Promise<GeneratedStory> => {
-        // Enforce daily story limit — works for both guests (by IP) and logged-in users
-        const userId = ctx.user?.id ?? null;
+        // Enforce the anonymous daily story limit by client IP.
         const ip = getClientIp(ctx.req as any);
-        await db.incrementStoryUsage(userId, ip);
-
-        if (!checkRateLimit(`generate:${ip}`, 10)) {
-          throw new Error("Rate limit exceeded. You can generate up to 10 stories per hour.");
-        }
+        await db.incrementStoryUsage(ip);
         const config: StoryConfig = {
           ...input,
           language: input.language as StoryConfig["language"],
@@ -252,17 +219,6 @@ export const appRouter = router({
         };
       }),
 
-    /** Get today's story usage count — works for guests and logged-in users */
-    usage: publicProcedure.query(async ({ ctx }) => {
-      const userId = ctx.user?.id ?? null;
-      const ip = getClientIp(ctx.req as any);
-      let count = 0;
-      if (userId !== null) {
-        count = await db.getStoryUsageToday(userId);
-      }
-      // For guests, we don't expose the count (no persistent session on client)
-      return { count, limit: db.FREE_DAILY_LIMIT, remaining: Math.max(0, db.FREE_DAILY_LIMIT - count), isGuest: userId === null };
-    }),
   }),
 
   // ── Google Cloud TTS ─────────────────────────────────────────────────────────

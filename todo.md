@@ -86,3 +86,5 @@
 - [x] Add gear icon to Home screen top-right corner
 - [x] Remove child name, age group, language, voice from config screen
 - [x] Config screen reads child name/age/language/voice from Settings AsyncStorage
+- [x] Remove all login and OAuth user-interface flows
+- [x] Set a simple IP-based daily story-generation limit of 10

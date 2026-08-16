@@ -48,8 +48,9 @@ export type CommunityPost = typeof communityPosts.$inferSelect;
 export type InsertCommunityPost = typeof communityPosts.$inferInsert;
 
 /**
- * Daily story usage tracking per user.
- * One row per user per UTC date. Incremented on each story generation.
+ * Anonymous daily story usage tracking per client IP.
+ * The legacy userId column holds a stable negative key derived from the IP;
+ * the raw IP is not stored. One row is maintained per client per UTC date.
  */
 export const storyUsage = mysqlTable("story_usage", {
   id: int("id").autoincrement().primaryKey(),

@@ -121,17 +121,17 @@ export async function deleteCommunityPost(id: number) {
 
 // ── Story Usage (daily limit) ────────────────────────────────────────────
 
-export const FREE_DAILY_LIMIT = 3;
-// Special userId for guest tracking: we use a negative hash of the IP
-// stored as a large negative int so it never collides with real user IDs.
+export const DAILY_STORY_LIMIT = 10;
+// The existing story_usage table stores an integer identity. Keep anonymous
+// usage keys in the negative range so they cannot collide with real user IDs.
 const GUEST_ID_OFFSET = -2_000_000_000;
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
-/** Convert an IP string to a stable negative integer for guest tracking. */
-function ipToGuestId(ip: string): number {
+/** Convert an IP string to a stable negative integer for anonymous tracking. */
+export function ipToGuestId(ip: string): number {
   let hash = 0;
   for (let i = 0; i < ip.length; i++) {
     hash = (hash * 31 + ip.charCodeAt(i)) & 0x7fffffff;
@@ -139,31 +139,16 @@ function ipToGuestId(ip: string): number {
   return GUEST_ID_OFFSET + (hash % 1_000_000_000);
 }
 
-export async function getStoryUsageToday(userId: number): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
-  const rows = await db
-    .select()
-    .from(storyUsage)
-    .where(and(eq(storyUsage.userId, userId), eq(storyUsage.date, todayUtc())))
-    .limit(1);
-  return rows[0]?.count ?? 0;
-}
-
 /**
- * Increment today's story count.
- * Pass userId for logged-in users, or ip for guests.
- * Throws with a login-prompt message when the limit is reached.
+ * Increment today's anonymous story count for an IP address.
+ * The IP is converted to a stable non-reversible database key; the raw IP is
+ * never stored in the story_usage table.
  */
-export async function incrementStoryUsage(
-  userId: number | null,
-  ip?: string
-): Promise<{ count: number; isGuest: boolean }> {
+export async function incrementStoryUsage(ip: string): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const today = todayUtc();
-  const isGuest = userId === null;
-  const effectiveId = isGuest ? ipToGuestId(ip ?? "unknown") : userId!;
+  const effectiveId = ipToGuestId(ip);
 
   // Upsert: insert or increment
   await db
@@ -178,23 +163,18 @@ export async function incrementStoryUsage(
     .limit(1);
   const newCount = rows[0]?.count ?? 1;
 
-  if (newCount > FREE_DAILY_LIMIT) {
+  if (newCount > DAILY_STORY_LIMIT) {
     // Roll back the increment
     await db
       .update(storyUsage)
       .set({ count: sql`${storyUsage.count} - 1` })
       .where(and(eq(storyUsage.userId, effectiveId), eq(storyUsage.date, today)));
-    if (isGuest) {
-      throw new Error(
-        `LIMIT_REACHED_GUEST:You've used your 3 free stories today. Sign in to continue generating stories.`
-      );
-    }
     throw new Error(
-      `LIMIT_REACHED:Daily limit reached. Free users can generate ${FREE_DAILY_LIMIT} stories per day. Come back tomorrow!`
+      `DAILY_LIMIT_REACHED:You've used all ${DAILY_STORY_LIMIT} stories for today. Come back tomorrow for more magical tales!`
     );
   }
 
-  return { count: newCount, isGuest };
+  return newCount;
 }
 
 export async function incrementLikeCount(id: number) {

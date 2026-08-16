@@ -90,3 +90,4 @@
 - [x] Set a simple IP-based daily story-generation limit of 10
 - [x] Synthesize all story narration paragraphs in parallel while retaining ordered playback and preparation progress
 - [x] End every story with a child-addressed "Good night, sweet dreams" line in the selected language
+- [x] Reduce the time required to generate and display a completed story

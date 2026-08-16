@@ -8,15 +8,13 @@ import { randomUUID } from "crypto";
 import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { storagePut } from "./storage.js";
 import { ensureLocalizedStoryClosing, getLocalizedGoodNightLine } from "../shared/story-closing.js";
+import { getStoryOutputTokenLimit, getStoryTargetWordCount } from "../shared/story-generation.js";
 
 function getClientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) return (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0].trim();
   return req.ip ?? "unknown";
 }
-
-// Approximate words per minute for a calm, soothing read-aloud voice
-const WORDS_PER_MINUTE = 132;
 
 const AGE_INSTRUCTIONS: Record<string, string> = {
   "3-4": "The child is 3–4 years old. Use very simple words (1–2 syllables where possible), very short sentences (5–8 words), and highly repetitive, rhythmic language. Keep the story gentle, slow-paced, and focused on one simple idea.",
@@ -41,7 +39,7 @@ const LANGUAGE_CODES: Record<string, string> = {
 };
 
 function buildStoryPrompt(config: StoryConfig): string {
-  const wordCount = config.lengthMinutes * WORDS_PER_MINUTE;
+  const wordCount = getStoryTargetWordCount(config.lengthMinutes);
 
   const characterDesc =
     config.characterType === "Custom" && config.customCharacter?.trim()
@@ -139,6 +137,8 @@ export const appRouter = router({
         const prompt = buildStoryPrompt(config);
 
         const response = await invokeLLM({
+          maxTokens: getStoryOutputTokenLimit(config.lengthMinutes),
+          response_format: { type: "json_object" },
           messages: [
             {
               role: "system",
@@ -176,6 +176,8 @@ export const appRouter = router({
         // If first attempt failed (e.g. model returned only backticks), retry with a direct prompt
         if (!parsed || !Array.isArray(parsed.paragraphs) || parsed.paragraphs.length === 0) {
           const retryResponse = await invokeLLM({
+            maxTokens: getStoryOutputTokenLimit(config.lengthMinutes),
+            response_format: { type: "json_object" },
             messages: [
               {
                 role: "system",

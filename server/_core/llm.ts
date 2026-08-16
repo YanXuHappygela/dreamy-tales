@@ -266,6 +266,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     output_schema,
     responseFormat,
     response_format,
+    maxTokens,
+    max_tokens,
   } = params;
 
   const payload: Record<string, unknown> = {
@@ -282,10 +284,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768;
-  payload.thinking = {
-    budget_tokens: 128,
-  };
+  // Keep output bounded unless a caller provides a tailored allowance. Avoid
+  // forcing model reasoning for everyday creative generation, where it adds
+  // latency without improving the required structured story output.
+  payload.max_tokens = maxTokens ?? max_tokens ?? 4096;
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,

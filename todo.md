@@ -105,3 +105,10 @@
 - [x] Make the story-generation model and base prompt configurable through deployment settings
 - [x] Set the default to the requested supported Gemini Flash model after catalog verification
 - [x] Make story-generation temperature configurable through deployment settings
+- [x] Fix the live Cloud SQL story_usage insert failure that blocks story generation
+- [x] Raise the anonymous daily story-generation limit to 50
+- [x] Inspect the live Cloud SQL story_usage table definition and repair its remaining insert constraint
+- [x] Move anonymous daily-limit writes to a dedicated Cloud SQL counter table with a schema migration
+- [x] Initialize the dedicated counter table with a one-time administrator connection and validate application-account access
+- [x] Correct the application account’s effective INSERT and UPDATE privileges on anonymous_story_usage
+- [x] Capture the underlying Cloud Run counter-write error and apply the database-compatible repair

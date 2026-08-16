@@ -1,9 +1,12 @@
 import { eq, desc, sql, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, communityPosts, InsertCommunityPost, storyUsage } from "../drizzle/schema";
+import { createHash } from "crypto";
+import { createPool, type Pool } from "mysql2/promise";
+import { InsertUser, users, communityPosts, InsertCommunityPost, anonymousStoryUsage } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: Pool | null = null;
 
 export function getDatabaseConnectionConfig(): string | Record<string, string> | null {
   const socketPath = process.env.DATABASE_SOCKET_PATH;
@@ -28,7 +31,12 @@ export async function getDb() {
   const connection = getDatabaseConnectionConfig();
   if (!_db && connection) {
     try {
-      _db = drizzle(connection as any);
+      if (typeof connection === "string") {
+        _db = drizzle(connection);
+      } else {
+        _pool = createPool(connection);
+        _db = drizzle({ client: _pool }) as unknown as ReturnType<typeof drizzle>;
+      }
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -140,22 +148,41 @@ export async function deleteCommunityPost(id: number) {
 
 // ── Story Usage (daily limit) ────────────────────────────────────────────
 
-export const DAILY_STORY_LIMIT = 10;
-// The existing story_usage table stores an integer identity. Keep anonymous
-// usage keys in the negative range so they cannot collide with real user IDs.
-const GUEST_ID_OFFSET = -2_000_000_000;
+export const DAILY_STORY_LIMIT = 50;
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
-/** Convert an IP string to a stable negative integer for anonymous tracking. */
-export function ipToGuestId(ip: string): number {
-  let hash = 0;
-  for (let i = 0; i < ip.length; i++) {
-    hash = (hash * 31 + ip.charCodeAt(i)) & 0x7fffffff;
+/** Convert an IP string to a stable one-way key; the raw IP is never stored. */
+export function ipToGuestKey(ip: string): string {
+  return createHash("sha256").update(ip).digest("hex");
+}
+
+function describeMySqlError(error: unknown): string {
+  const source =
+    error && typeof error === "object" && "cause" in error && (error as { cause?: unknown }).cause
+      ? (error as { cause: unknown }).cause
+      : error;
+  if (!source || typeof source !== "object") {
+    return source instanceof Error ? source.message : String(source);
   }
-  return GUEST_ID_OFFSET + (hash % 1_000_000_000);
+
+  const mysql = source as {
+    code?: string;
+    errno?: number;
+    sqlState?: string;
+    sqlMessage?: string;
+    message?: string;
+  };
+  return [
+    mysql.code && `code=${mysql.code}`,
+    mysql.errno !== undefined && `errno=${mysql.errno}`,
+    mysql.sqlState && `sqlState=${mysql.sqlState}`,
+    mysql.sqlMessage || mysql.message,
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 /**
@@ -167,27 +194,36 @@ export async function incrementStoryUsage(ip: string): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const today = todayUtc();
-  const effectiveId = ipToGuestId(ip);
+  const clientKey = ipToGuestKey(ip);
 
   // Upsert: insert or increment
-  await db
-    .insert(storyUsage)
-    .values({ userId: effectiveId, date: today, count: 1 })
-    .onDuplicateKeyUpdate({ set: { count: sql`${storyUsage.count} + 1` } });
+  try {
+    await db.execute(sql`
+      INSERT INTO anonymous_story_usage (clientKey, date, count)
+      VALUES (${clientKey}, ${today}, 1)
+      ON DUPLICATE KEY UPDATE count = count + 1
+    `);
+  } catch (error) {
+    const detail = describeMySqlError(error);
+    console.error("[Database] Anonymous story counter upsert failed:", error);
+    throw new Error(
+      `ANONYMOUS_COUNTER_WRITE_FAILED: database=${process.env.DATABASE_NAME ?? "unknown"}; ${detail}`,
+    );
+  }
 
   const rows = await db
     .select()
-    .from(storyUsage)
-    .where(and(eq(storyUsage.userId, effectiveId), eq(storyUsage.date, today)))
+    .from(anonymousStoryUsage)
+    .where(and(eq(anonymousStoryUsage.clientKey, clientKey), eq(anonymousStoryUsage.date, today)))
     .limit(1);
   const newCount = rows[0]?.count ?? 1;
 
   if (newCount > DAILY_STORY_LIMIT) {
     // Roll back the increment
     await db
-      .update(storyUsage)
-      .set({ count: sql`${storyUsage.count} - 1` })
-      .where(and(eq(storyUsage.userId, effectiveId), eq(storyUsage.date, today)));
+      .update(anonymousStoryUsage)
+      .set({ count: sql`${anonymousStoryUsage.count} - 1` })
+      .where(and(eq(anonymousStoryUsage.clientKey, clientKey), eq(anonymousStoryUsage.date, today)));
     throw new Error(
       `DAILY_LIMIT_REACHED:You've used all ${DAILY_STORY_LIMIT} stories for today. Come back tomorrow for more magical tales!`
     );

@@ -22,6 +22,13 @@
       "when": 1785723111111,
       "tag": "0002_milky_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786917959047,
+      "tag": "0003_goofy_venus",
+      "breakpoints": true
     }
   ]
 }

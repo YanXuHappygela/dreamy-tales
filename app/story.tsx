@@ -16,6 +16,7 @@ import { STORIES_STORAGE_KEY } from "@/shared/const";
 import { trpc } from "@/lib/trpc";
 import { shareStoryAsPdf } from "@/lib/storyPdf";
 import { loadSettings } from "@/app/settings";
+import { synthesizeParagraphsInParallel } from "@/lib/parallel-synthesis";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -111,7 +112,9 @@ export default function StoryScreen() {
   };
 
   /**
-   * Pre-synthesize ALL paragraphs sequentially before playback starts.
+   * Pre-synthesize ALL paragraphs in parallel before playback starts.
+   * Promise.all retains paragraph order in the returned URL array even if
+   * individual synthesis requests finish in a different order.
    * Returns an array of audio URLs, one per paragraph.
    * Runs network calls while the screen is still on, so background mode is not needed here.
    */
@@ -119,24 +122,23 @@ export default function StoryScreen() {
     async (paragraphs: string[], config: GeneratedStory["config"], generation: number): Promise<string[]> => {
       const { langCode, voiceId } = resolveVoice(config);
       const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
-      const urls: string[] = [];
+      const urls = await synthesizeParagraphsInParallel(
+        paragraphs,
+        async (paragraph) => {
+          const result = await synthesizeMutation.mutateAsync({
+            text: paragraph,
+            voiceId,
+            languageCode: langCode,
+            speakingRate: speedRef.current,
+          });
+          return result.url.startsWith("http") ? result.url : `${apiBase}${result.url}`;
+        },
+        (percent) => {
+          if (generation === generationRef.current) setSynthProgress(percent);
+        },
+      );
 
-      for (let i = 0; i < paragraphs.length; i++) {
-        if (generation !== generationRef.current) return [];
-        setSynthProgress(Math.round((i / paragraphs.length) * 100));
-
-        const result = await synthesizeMutation.mutateAsync({
-          text: paragraphs[i],
-          voiceId,
-          languageCode: langCode,
-          speakingRate: speedRef.current,
-        });
-
-        const url = result.url.startsWith("http") ? result.url : `${apiBase}${result.url}`;
-        urls.push(url);
-      }
-      setSynthProgress(100);
-      return urls;
+      return generation === generationRef.current ? urls : [];
     },
     [synthesizeMutation] // eslint-disable-line react-hooks/exhaustive-deps
   );

@@ -88,3 +88,4 @@
 - [x] Config screen reads child name/age/language/voice from Settings AsyncStorage
 - [x] Remove all login and OAuth user-interface flows
 - [x] Set a simple IP-based daily story-generation limit of 10
+- [x] Synthesize all story narration paragraphs in parallel while retaining ordered playback and preparation progress

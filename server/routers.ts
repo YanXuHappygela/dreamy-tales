@@ -7,6 +7,7 @@ import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
 import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { storagePut } from "./storage.js";
+import { ensureLocalizedStoryClosing, getLocalizedGoodNightLine } from "../shared/story-closing.js";
 
 function getClientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -52,10 +53,7 @@ function buildStoryPrompt(config: StoryConfig): string {
       ? `The story is for a child named ${config.childName}.`
       : "";
 
-  const goodNightLine =
-    config.childName && config.childName !== "the little one"
-      ? `"Good night, sweet dreams, ${config.childName}."`
-      : `"Good night, sweet dreams."`;
+  const goodNightLine = getLocalizedGoodNightLine(config.language, config.childName);
 
   const storyIdeaClause =
     config.storyIdea?.trim()
@@ -89,7 +87,7 @@ Requirements:
 - Do NOT include scary, violent, or overly exciting content
 - The story should feel cozy and reassuring
 - The main character must have a name that is DIFFERENT from the child's name (${config.childName && config.childName !== "the little one" ? `"${config.childName}"` : "the child's name"}). Give the character a distinct, imaginative name that fits their type (e.g. a bunny named Pip, a dragon named Ember)
-- The VERY LAST paragraph must end with the exact closing line: ${goodNightLine} — this is the final sentence of the story, spoken gently as if tucking the child in
+  - The VERY LAST paragraph must end with this exact closing line in the selected language: "${goodNightLine}" — this is the final sentence of the story, spoken gently as if tucking the child in
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {
@@ -206,8 +204,10 @@ export const appRouter = router({
           Array.isArray(parsed.paragraphs) && parsed.paragraphs.length > 0
             ? parsed.paragraphs
             : [raw];
-        const paragraphs: string[] = rawParagraphs.map((p: unknown) =>
-          typeof p === "string" ? p : String(p)
+        const paragraphs = ensureLocalizedStoryClosing(
+          rawParagraphs.map((p: unknown) => (typeof p === "string" ? p : String(p))),
+          config.language,
+          config.childName,
         );
 
         return {

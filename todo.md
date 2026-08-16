@@ -112,3 +112,4 @@
 - [x] Initialize the dedicated counter table with a one-time administrator connection and validate application-account access
 - [x] Correct the application account’s effective INSERT and UPDATE privileges on anonymous_story_usage
 - [x] Capture the underlying Cloud Run counter-write error and apply the database-compatible repair
+- [x] Review app-to-server security risks and document prioritized mitigations

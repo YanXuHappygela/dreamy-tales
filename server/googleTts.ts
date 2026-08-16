@@ -2,13 +2,28 @@
  * Google Cloud Text-to-Speech helpers
  * Docs: https://cloud.google.com/text-to-speech/docs/reference/rest
  */
+import { GoogleAuth } from "google-auth-library";
 
 const GOOGLE_TTS_BASE = "https://texttospeech.googleapis.com/v1";
+const googleAuth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
 
 function getApiKey(): string {
   const key = process.env.GOOGLE_TTS_API_KEY;
   if (!key) throw new Error("GOOGLE_TTS_API_KEY is not set");
   return key;
+}
+
+/** Cloud Run uses its attached service account; local development keeps API-key support. */
+export function usesCloudRunIdentity(): boolean {
+  return Boolean(process.env.GOOGLE_CLOUD_PROJECT);
+}
+
+async function getGoogleAuthHeaders(): Promise<Record<string, string>> {
+  if (!usesCloudRunIdentity()) {
+    return { "X-Goog-Api-Key": getApiKey() };
+  }
+  const client = await googleAuth.getClient();
+  return Object.fromEntries((await client.getRequestHeaders()).entries());
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -38,12 +53,11 @@ const LANG_PREFIXES: Record<string, string[]> = {
 // ── Voice listing ─────────────────────────────────────────────────────────────
 
 export async function listGoogleVoices(language: string): Promise<CloudVoiceOption[]> {
-  const apiKey = getApiKey();
   const prefixes = LANG_PREFIXES[language] ?? ["en-"];
 
   // Fetch all voices (no languageCode filter so we get all variants)
   const res = await fetch(`${GOOGLE_TTS_BASE}/voices`, {
-    headers: { "X-Goog-Api-Key": apiKey },
+    headers: await getGoogleAuthHeaders(),
   });
   if (!res.ok) {
     const err = await res.text();
@@ -109,7 +123,6 @@ export async function synthesizeSpeech(params: {
   languageCode: string;  // BCP-47, e.g. "en-US"
   speakingRate?: number; // 0.25–4.0, default 1.0
 }): Promise<Buffer> {
-  const apiKey = getApiKey();
 
   const body = {
     input: { text: params.text },
@@ -129,7 +142,7 @@ export async function synthesizeSpeech(params: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
+      ...(await getGoogleAuthHeaders()),
     },
     body: JSON.stringify(body),
   });

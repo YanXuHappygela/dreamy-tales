@@ -91,3 +91,17 @@
 - [x] Synthesize all story narration paragraphs in parallel while retaining ordered playback and preparation progress
 - [x] End every story with a child-addressed "Good night, sweet dreams" line in the selected language
 - [x] Reduce the time required to generate and display a completed story
+- [x] Verify parallel voice-synthesis request behavior and ordered narration playback
+- [x] Prepare and deploy the Dreamy Tales backend and web experience on Google Cloud
+- [x] Configure the stateless deployment for Google Cloud project dreamytales-498114
+- [x] Verify and deploy the stateless backend in Cloud Run region us-central1
+- [x] Create the approved Cloud Run, Cloud SQL, Secret Manager, and service-account resources
+- [x] Keep generated stories and synthesized narration stored only on the local device after migration
+- [x] Configure the Google Cloud backend as a stateless generation API with no story or audio archive
+- [x] Deploy through keyless user-authorized Cloud Shell because service-account JSON keys are blocked by organization policy
+- [x] Verify deployment permissions granted to dreamy-tales-deployer before resource creation
+- [x] Grant the Cloud Run runtime service account scoped access to the database-password secret and retry deployment
+- [x] Validate the live Cloud Run API and point the mobile client at https://dreamy-tales-api-883430697720.us-central1.run.app
+- [x] Make the story-generation model and base prompt configurable through deployment settings
+- [x] Set the default to the requested supported Gemini Flash model after catalog verification
+- [x] Make story-generation temperature configurable through deployment settings

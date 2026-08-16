@@ -6,9 +6,9 @@ import { invokeLLM } from "./_core/llm.js";
 import { GeneratedStory, StoryConfig } from "../shared/types.js";
 import { randomUUID } from "crypto";
 import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
-import { storagePut } from "./storage.js";
 import { ensureLocalizedStoryClosing, getLocalizedGoodNightLine } from "../shared/story-closing.js";
 import { getStoryOutputTokenLimit, getStoryTargetWordCount } from "../shared/story-generation.js";
+import { getStoryGenerationSettings } from "./story-generation-config.js";
 
 function getClientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -40,6 +40,7 @@ const LANGUAGE_CODES: Record<string, string> = {
 
 function buildStoryPrompt(config: StoryConfig): string {
   const wordCount = getStoryTargetWordCount(config.lengthMinutes);
+  const { basePrompt } = getStoryGenerationSettings();
 
   const characterDesc =
     config.characterType === "Custom" && config.customCharacter?.trim()
@@ -64,7 +65,7 @@ function buildStoryPrompt(config: StoryConfig): string {
   const langInstruction =
     LANGUAGE_INSTRUCTIONS[config.language] ?? LANGUAGE_INSTRUCTIONS["English"];
 
-  return `You are a gentle, imaginative children's story author who writes soothing bedtime stories.
+  return `${basePrompt}
 
 ${childNameClause}
 ${ageInstruction}
@@ -135,8 +136,11 @@ export const appRouter = router({
           ageGroup: input.ageGroup as StoryConfig["ageGroup"],
         };
         const prompt = buildStoryPrompt(config);
+        const generationSettings = getStoryGenerationSettings();
 
         const response = await invokeLLM({
+          model: generationSettings.model,
+          temperature: generationSettings.temperature,
           maxTokens: getStoryOutputTokenLimit(config.lengthMinutes),
           response_format: { type: "json_object" },
           messages: [
@@ -176,6 +180,8 @@ export const appRouter = router({
         // If first attempt failed (e.g. model returned only backticks), retry with a direct prompt
         if (!parsed || !Array.isArray(parsed.paragraphs) || parsed.paragraphs.length === 0) {
           const retryResponse = await invokeLLM({
+            model: generationSettings.model,
+            temperature: generationSettings.temperature,
             maxTokens: getStoryOutputTokenLimit(config.lengthMinutes),
             response_format: { type: "json_object" },
             messages: [
@@ -236,8 +242,9 @@ export const appRouter = router({
       }),
 
     /**
-     * Synthesize a paragraph of text to MP3 audio.
-     * Returns a storage URL that the client can play directly.
+     * Synthesize a paragraph to MP3 audio. The API returns the bytes for the
+     * phone to save in its private filesystem; no narration audio is archived
+     * by the server.
      */
     synthesize: publicProcedure
       .input(
@@ -256,11 +263,7 @@ export const appRouter = router({
           speakingRate: input.speakingRate,
         });
 
-        // Upload to storage and return a URL the client can stream
-        const key = `tts/${randomUUID()}.mp3`;
-        const { url } = await storagePut(key, audioBuffer, "audio/mpeg");
-
-        return { url };
+        return { audioBase64: audioBuffer.toString("base64") };
       }),
   }),
 

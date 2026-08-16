@@ -1,0 +1,10 @@
+node_modules
+.expo
+.git
+.manus-logs
+dist
+coverage
+*.log
+.env
+*.pem
+*.key

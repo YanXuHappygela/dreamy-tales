@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system/legacy";
 import { trpc } from "@/lib/trpc";
 import { StoryLanguage } from "@/shared/types";
 
@@ -78,10 +79,15 @@ export function VoicePicker({ language, selectedVoiceId, onVoiceSelect }: VoiceP
         previewPlayerRef.current?.remove();
         previewPlayerRef.current = null;
 
-        const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
-        const audioUrl = result.url.startsWith("http")
-          ? result.url
-          : `${apiBase}${result.url}`;
+        let audioUrl = `data:audio/mpeg;base64,${result.audioBase64}`;
+        if (Platform.OS !== "web" && FileSystem.cacheDirectory) {
+          const safeVoiceId = variables.voiceId.replace(/[^a-zA-Z0-9_-]/g, "_");
+          const fileUri = `${FileSystem.cacheDirectory}dreamy-tales-preview-${safeVoiceId}.mp3`;
+          await FileSystem.writeAsStringAsync(fileUri, result.audioBase64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          audioUrl = fileUri;
+        }
 
         const player = createAudioPlayer({ uri: audioUrl });
         previewPlayerRef.current = player;

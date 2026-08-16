@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -17,6 +18,7 @@ import { trpc } from "@/lib/trpc";
 import { shareStoryAsPdf } from "@/lib/storyPdf";
 import { loadSettings } from "@/app/settings";
 import { synthesizeParagraphsInParallel } from "@/lib/parallel-synthesis";
+import { getNarrationFilename } from "@/lib/narration-storage";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -38,6 +40,28 @@ type NarrationSpeed = 0.5 | 0.7 | 0.9 | 1.0 | 1.1 | 1.3 | 1.5;
 
 const SPEED_OPTIONS: NarrationSpeed[] = [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
 const DEFAULT_SPEED: NarrationSpeed = 0.9;
+
+/** Save synthesized MP3 data into the app's private device storage. */
+async function saveNarrationOnDevice(
+  audioBase64: string,
+  storyId: string,
+  paragraphIndex: number,
+): Promise<string> {
+  if (Platform.OS === "web") {
+    return `data:audio/mpeg;base64,${audioBase64}`;
+  }
+
+  const documentDirectory = FileSystem.documentDirectory;
+  if (!documentDirectory) throw new Error("Device storage is unavailable");
+
+  const narrationDirectory = `${documentDirectory}dreamy-tales/narration/`;
+  await FileSystem.makeDirectoryAsync(narrationDirectory, { intermediates: true });
+  const fileUri = `${narrationDirectory}${getNarrationFilename(storyId, paragraphIndex)}`;
+  await FileSystem.writeAsStringAsync(fileUri, audioBase64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return fileUri;
+}
 
 export default function StoryScreen() {
   useKeepAwake();
@@ -115,23 +139,27 @@ export default function StoryScreen() {
    * Pre-synthesize ALL paragraphs in parallel before playback starts.
    * Promise.all retains paragraph order in the returned URL array even if
    * individual synthesis requests finish in a different order.
-   * Returns an array of audio URLs, one per paragraph.
+   * Returns an array of local audio file URIs, one per paragraph.
    * Runs network calls while the screen is still on, so background mode is not needed here.
    */
   const preSynthesizeAll = useCallback(
-    async (paragraphs: string[], config: GeneratedStory["config"], generation: number): Promise<string[]> => {
+    async (
+      storyId: string,
+      paragraphs: string[],
+      config: GeneratedStory["config"],
+      generation: number,
+    ): Promise<string[]> => {
       const { langCode, voiceId } = resolveVoice(config);
-      const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
       const urls = await synthesizeParagraphsInParallel(
         paragraphs,
-        async (paragraph) => {
+        async (paragraph, paragraphIndex) => {
           const result = await synthesizeMutation.mutateAsync({
             text: paragraph,
             voiceId,
             languageCode: langCode,
             speakingRate: speedRef.current,
           });
-          return result.url.startsWith("http") ? result.url : `${apiBase}${result.url}`;
+          return saveNarrationOnDevice(result.audioBase64, storyId, paragraphIndex);
         },
         (percent) => {
           if (generation === generationRef.current) setSynthProgress(percent);
@@ -240,7 +268,7 @@ export default function StoryScreen() {
         interruptionMode: "mixWithOthers",
       });
 
-      const urls = await preSynthesizeAll(story.paragraphs, story.config, gen);
+      const urls = await preSynthesizeAll(story.id, story.paragraphs, story.config, gen);
       if (gen !== generationRef.current || urls.length === 0) return;
 
       audioUrlsRef.current = urls;

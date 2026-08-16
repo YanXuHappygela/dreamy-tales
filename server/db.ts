@@ -5,11 +5,30 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+export function getDatabaseConnectionConfig(): string | Record<string, string> | null {
+  const socketPath = process.env.DATABASE_SOCKET_PATH;
+  if (socketPath) {
+    const { DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME } = process.env;
+    if (!DATABASE_USER || !DATABASE_PASSWORD || !DATABASE_NAME) {
+      throw new Error("Cloud SQL connection requires DATABASE_USER, DATABASE_PASSWORD, and DATABASE_NAME");
+    }
+    return {
+      host: "localhost",
+      socketPath,
+      user: DATABASE_USER,
+      password: DATABASE_PASSWORD,
+      database: DATABASE_NAME,
+    };
+  }
+  return process.env.DATABASE_URL ?? null;
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  const connection = getDatabaseConnectionConfig();
+  if (!_db && connection) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = drizzle(connection as any);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

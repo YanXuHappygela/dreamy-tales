@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -54,6 +55,7 @@ export type ToolChoice = ToolChoicePrimitive | ToolChoiceByName | ToolChoiceExpl
 
 export type InvokeParams = {
   model?: string;
+  temperature?: number;
   messages: Message[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
@@ -213,6 +215,17 @@ const assertApiKey = () => {
   }
 };
 
+const messageText = (message: Message): string =>
+  ensureArray(message.content)
+    .map((part) => {
+      if (typeof part === "string") return part;
+      return part.type === "text" ? part.text : JSON.stringify(part);
+    })
+    .join("\n");
+
+const useVertexAi = () => Boolean(process.env.GOOGLE_CLOUD_PROJECT);
+const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
+
 const normalizeResponseFormat = ({
   responseFormat,
   response_format,
@@ -253,7 +266,58 @@ const normalizeResponseFormat = ({
   };
 };
 
+/**
+ * Cloud Run uses its attached service-account identity to call Gemini through
+ * Google Cloud. Story text is returned to the phone and is not persisted here.
+ */
+async function invokeVertexAi(params: InvokeParams): Promise<InvokeResult> {
+  const project = process.env.GOOGLE_CLOUD_PROJECT;
+  if (!project) throw new Error("GOOGLE_CLOUD_PROJECT is required for Vertex AI");
+
+  const systemInstruction = params.messages
+    .filter((message) => message.role === "system")
+    .map(messageText)
+    .join("\n\n");
+  const contents = params.messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: messageText(message) }],
+  }));
+  const maxOutputTokens = params.maxTokens ?? params.max_tokens ?? 4096;
+  const responseFormat = normalizeResponseFormat(params);
+  const model = params.model ?? process.env.GOOGLE_GENAI_MODEL ?? DEFAULT_GEMINI_MODEL;
+  const ai = new GoogleGenAI({
+    vertexai: true,
+    project,
+    location: process.env.GOOGLE_CLOUD_LOCATION ?? "global",
+  });
+  const response = await ai.models.generateContent({
+    model,
+    contents,
+    config: {
+      ...(systemInstruction ? { systemInstruction } : {}),
+      maxOutputTokens,
+      ...(typeof params.temperature === "number" ? { temperature: params.temperature } : {}),
+      ...(responseFormat?.type !== "text" ? { responseMimeType: "application/json" } : {}),
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    },
+  });
+
+  return {
+    id: crypto.randomUUID(),
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [{
+      index: 0,
+      message: { role: "assistant", content: response.text ?? "" },
+      finish_reason: "stop",
+    }],
+  };
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  if (useVertexAi()) return invokeVertexAi(params);
   assertApiKey();
 
   const {
@@ -268,10 +332,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     response_format,
     maxTokens,
     max_tokens,
+    temperature,
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: modelOverride ?? "gemini-3-flash-preview",
+    model: modelOverride ?? DEFAULT_GEMINI_MODEL,
     messages: messages.map(normalizeMessage),
   };
 
@@ -288,6 +353,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   // forcing model reasoning for everyday creative generation, where it adds
   // latency without improving the required structured story output.
   payload.max_tokens = maxTokens ?? max_tokens ?? 4096;
+
+  if (typeof temperature === "number") {
+    payload.temperature = temperature;
+  }
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,

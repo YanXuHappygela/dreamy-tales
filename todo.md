@@ -125,3 +125,4 @@
 - [x] Restore and deploy the structured daily-limit monitoring signal
 - [x] Attach the verified GoogleAlert email channel to the repeated daily-limit alert policy
 - [x] Verify Cloud Monitoring metric and alert policy 11435303686333956391 after deployment
+- [x] Diagnose and fix the live story-generation stall or missing-output failure

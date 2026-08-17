@@ -13,6 +13,7 @@ import { SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
 import { loadSettings } from "@/app/settings";
 import { trpc } from "@/lib/trpc";
+import { saveActiveStory } from "@/lib/story-navigation";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -59,9 +60,14 @@ export default function HomeScreen() {
   }, [loadRecentStories]));
 
   const surpriseMutation = trpc.story.generate.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setIsSurprising(false);
-      router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
+      try {
+        const storyId = await saveActiveStory(data);
+        router.push({ pathname: "/story", params: { storyId } } as any);
+      } catch {
+        Alert.alert("Could not open story", "Your story was created, but could not be saved on this device. Please try again.");
+      }
     },
     onError: (err) => {
       setIsSurprising(false);
@@ -101,9 +107,14 @@ export default function HomeScreen() {
     });
   };
 
-  const handleOpenStory = (story: SavedStory) => {
+  const handleOpenStory = async (story: SavedStory) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({ pathname: "/story", params: { storyData: JSON.stringify(story) } } as any);
+    try {
+      const storyId = await saveActiveStory(story);
+      router.push({ pathname: "/story", params: { storyId } } as any);
+    } catch {
+      Alert.alert("Could not open story", "Please try again.");
+    }
   };
 
   const handleSettings = () => {

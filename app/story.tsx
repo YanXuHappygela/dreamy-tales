@@ -19,6 +19,7 @@ import { shareStoryAsPdf } from "@/lib/storyPdf";
 import { loadSettings } from "@/app/settings";
 import { synthesizeParagraphsInParallel } from "@/lib/parallel-synthesis";
 import { getNarrationFilename } from "@/lib/narration-storage";
+import { loadActiveStory, saveActiveStory } from "@/lib/story-navigation";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -66,8 +67,9 @@ async function saveNarrationOnDevice(
 export default function StoryScreen() {
   useKeepAwake();
   const router = useRouter();
-  const params = useLocalSearchParams<{ storyData: string }>();
+  const params = useLocalSearchParams<{ storyId?: string; storyData?: string }>();
   const [story, setStory] = useState<GeneratedStory | null>(null);
+  const [storyLoadError, setStoryLoadError] = useState<string | null>(null);
   const [playState, setPlayState] = useState<PlayState>("idle");
   const [currentParagraph, setCurrentParagraph] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
@@ -90,10 +92,15 @@ export default function StoryScreen() {
   const synthesizeMutation = trpc.tts.synthesize.useMutation();
 
   const generateAnotherMutation = trpc.story.generate.useMutation({
-    onSuccess: (data: GeneratedStory) => {
+    onSuccess: async (data: GeneratedStory) => {
       setIsGeneratingAnother(false);
       stopAll();
-      router.replace({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
+      try {
+        const storyId = await saveActiveStory(data);
+        router.replace({ pathname: "/story", params: { storyId } } as any);
+      } catch {
+        Alert.alert("Could not open story", "Your new story was created, but could not be saved on this device. Please try again.");
+      }
     },
     onError: () => {
       setIsGeneratingAnother(false);
@@ -102,15 +109,29 @@ export default function StoryScreen() {
   });
 
   useEffect(() => {
-    if (params.storyData) {
-      try {
-        const parsed: GeneratedStory = JSON.parse(params.storyData);
-        setStory(parsed);
-        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-      } catch { /**/ }
-    }
+    let active = true;
+    const loadStory = async () => {
+      // Legacy storyData stays supported for already-open deep links. New
+      // navigation passes only storyId, avoiding URL-size limits on mobile.
+      let parsed: GeneratedStory | null = null;
+      if (params.storyId) {
+        parsed = await loadActiveStory(params.storyId);
+      } else if (params.storyData) {
+        try { parsed = JSON.parse(params.storyData) as GeneratedStory; } catch { /**/ }
+      }
+
+      if (!active) return;
+      if (!parsed) {
+        setStoryLoadError("This story could not be opened. Please return home and try again.");
+        return;
+      }
+      setStoryLoadError(null);
+      setStory(parsed);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    };
+    void loadStory();
     return () => { stopAll(); };
-  }, [params.storyData, fadeAnim]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [params.storyId, params.storyData, fadeAnim]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Stop audio and invalidate any in-flight chain. */
   const stopAll = useCallback(() => {
@@ -361,7 +382,12 @@ export default function StoryScreen() {
       <ScreenContainer containerClassName="bg-background">
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingEmoji}>🌙</Text>
-          <Text style={styles.loadingText}>Loading your story…</Text>
+          <Text style={styles.loadingText}>{storyLoadError ?? "Loading your story…"}</Text>
+          {storyLoadError && (
+            <TouchableOpacity style={styles.retryButton} onPress={() => router.replace("/" as any)} activeOpacity={0.8}>
+              <Text style={styles.retryButtonText}>Back to Home</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScreenContainer>
     );
@@ -528,6 +554,8 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0D0B2B" },
   loadingEmoji: { fontSize: 56, marginBottom: 16 },
   loadingText: { fontSize: 18, color: "#9B8BB4" },
+  retryButton: { marginTop: 16, backgroundColor: Y, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14 },
+  retryButtonText: { color: "#0D0B2B", fontWeight: "700" },
   topBar: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16,

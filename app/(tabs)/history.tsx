@@ -10,6 +10,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { SavedStory } from "@/shared/types";
 import { STORIES_STORAGE_KEY } from "@/shared/const";
+import { saveActiveStory } from "@/lib/story-navigation";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -58,9 +59,14 @@ export default function HistoryScreen() {
     ]);
   };
 
-  const handleOpen = (story: SavedStory) => {
+  const handleOpen = async (story: SavedStory) => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({ pathname: "/story", params: { storyData: JSON.stringify(story) } } as any);
+    try {
+      const storyId = await saveActiveStory(story);
+      router.push({ pathname: "/story", params: { storyId } } as any);
+    } catch {
+      Alert.alert("Could not open story", "Please try again.");
+    }
   };
 
   const formatDate = (iso: string) =>

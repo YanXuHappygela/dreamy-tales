@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, ScrollView, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, Platform, Dimensions, Animated,
+  StyleSheet, Platform, Dimensions, Animated, Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -11,6 +11,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LoadingStory } from "@/components/loading-story";
 import { loadSettings } from "@/app/settings";
+import { saveActiveStory } from "@/lib/story-navigation";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -120,8 +121,13 @@ export default function ConfigScreen() {
   }, []);
 
   const generateMutation = trpc.story.generate.useMutation({
-    onSuccess: (data: GeneratedStory) => {
-      router.push({ pathname: "/story", params: { storyData: JSON.stringify(data) } } as any);
+    onSuccess: async (data: GeneratedStory) => {
+      try {
+        const storyId = await saveActiveStory(data);
+        router.push({ pathname: "/story", params: { storyId } } as any);
+      } catch {
+        Alert.alert("Could not open story", "Your story was created, but could not be saved on this device. Please try again.");
+      }
     },
   });
 

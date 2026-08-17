@@ -115,3 +115,4 @@
 - [x] Review app-to-server security risks and document prioritized mitigations
 - [x] Revoke cloudsqlsuperuser from the Cloud SQL runtime application account and verify least-privilege grants
 - [x] Restart and validate the Dreamy Tales development server
+- [x] Design a secure mobile authentication or attestation gateway for private Cloud Run access

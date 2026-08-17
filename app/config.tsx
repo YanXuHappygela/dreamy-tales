@@ -13,6 +13,7 @@ import { LoadingStory } from "@/components/loading-story";
 import { loadSettings } from "@/app/settings";
 import { saveActiveStory } from "@/lib/story-navigation";
 import { buildSettingsSummary } from "@/lib/settings-summary";
+import { CHARACTER_OPTIONS } from "@/lib/story-options";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -21,13 +22,6 @@ const CARD_W = 120;
 const CARD_H = 130;
 const CARD_GAP = 14;
 
-const CHARACTER_OPTIONS = [
-  { label: "Bunny", emoji: "🐰" }, { label: "Dragon", emoji: "🐉" },
-  { label: "Princess", emoji: "👸" }, { label: "Robot", emoji: "🤖" },
-  { label: "Unicorn", emoji: "🦄" }, { label: "Bear", emoji: "🐻" },
-  { label: "Race Car", emoji: "🏎️" }, { label: "Dolphin", emoji: "🐬" },
-  { label: "Custom", emoji: "✏️" },
-];
 const SCENARIO_OPTIONS = [
   { label: "Forest", emoji: "🌲" }, { label: "Space", emoji: "🚀" },
   { label: "Ocean", emoji: "🌊" }, { label: "Castle", emoji: "🏰" },

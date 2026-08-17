@@ -150,8 +150,9 @@ export async function deleteCommunityPost(id: number) {
 
 export const DAILY_STORY_LIMIT = 50;
 
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+/** Return the UTC calendar-day key used for anonymous daily-limit accounting. */
+export function getUtcDailyKey(date: Date = new Date()): string {
+  return date.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 /** Convert an IP string to a stable one-way key; the raw IP is never stored. */
@@ -193,7 +194,7 @@ function describeMySqlError(error: unknown): string {
 export async function incrementStoryUsage(ip: string): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const today = todayUtc();
+  const today = getUtcDailyKey();
   const clientKey = ipToGuestKey(ip);
 
   // Upsert: insert or increment

@@ -118,3 +118,7 @@
 - [x] Design a secure mobile authentication or attestation gateway for private Cloud Run access
 - [x] Document exact execution steps for Firebase App Check, gateway verification, and private Cloud Run rollout
 - [x] Guide registration of iOS and Android Firebase App Check providers and a safe enforcement rollout
+- [ ] Define enforcement so only verified Dreamy Tales mobile builds can access the private backend
+- [x] Test and verify live enforcement of the 50-story anonymous daily limit
+- [x] Remove the isolated 50-count daily-limit test row with the Cloud SQL administrator identity
+- [x] Verify the existing UTC daily-limit reset boundary

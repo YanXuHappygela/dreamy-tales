@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DAILY_STORY_LIMIT, ipToGuestKey } from "../server/db";
+import { DAILY_STORY_LIMIT, getUtcDailyKey, ipToGuestKey } from "../server/db";
 
 describe("anonymous daily story limit", () => {
   it("sets the requested limit to fifty stories per day", () => {
@@ -13,5 +13,10 @@ describe("anonymous daily story limit", () => {
     expect(key).not.toBe(ipToGuestKey("203.0.113.43"));
     expect(key).toMatch(/^[a-f0-9]{64}$/);
     expect(String(key)).not.toContain("203.0.113.42");
+  });
+
+  it("resets on the UTC midnight boundary", () => {
+    expect(getUtcDailyKey(new Date("2026-08-16T23:59:59.999Z"))).toBe("2026-08-16");
+    expect(getUtcDailyKey(new Date("2026-08-17T00:00:00.000Z"))).toBe("2026-08-17");
   });
 });

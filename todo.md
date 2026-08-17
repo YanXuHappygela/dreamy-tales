@@ -132,5 +132,8 @@
 - [x] Refresh the Create Story configuration header after settings changes so it shows the latest age and language
 - [x] Add Panda, Spider, Bird, and Dog to the Main Character carousel
 - [x] Restart and verify the unresponsive Dreamy Tales development preview
-- [ ] Publish the Dreamy Tales codebase to the YanXuHappygela GitHub account
-- [ ] Publish the Dreamy Tales GitHub repository with public visibility
+- [x] Publish the Dreamy Tales codebase to the YanXuHappygela GitHub account
+- [x] Publish the Dreamy Tales GitHub repository with public visibility
+- [x] Push the Dreamy Tales main branch to the new YanXuHappygela/dreamy-tales repository
+- [x] Switch GitHub publishing authentication to YanXuHappygela
+- [x] Verify YanXuHappygela GitHub authorization and push the prepared main branch

@@ -138,3 +138,4 @@
 - [x] Switch GitHub publishing authentication to YanXuHappygela
 - [x] Verify YanXuHappygela GitHub authorization and push the prepared main branch
 - [x] Prevent the web preview from requesting a wake lock while the page is hidden
+- [x] Replace the public README with concise product information, high-level technology context, and simple build guidance

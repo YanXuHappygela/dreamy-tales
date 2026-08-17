@@ -4,6 +4,7 @@ import superjson from "superjson";
 import type { AppRouter } from "@/server/routers";
 import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "@/lib/_core/auth";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 /**
  * tRPC React client for type-safe API calls.
@@ -31,7 +32,7 @@ export function createTRPCClient() {
         },
         // Custom fetch to include credentials for cookie-based auth
         fetch(url, options) {
-          return fetch(url, {
+          return fetchWithTimeout(fetch, url, {
             ...options,
             credentials: "include",
           });

@@ -9,6 +9,8 @@ import { listGoogleVoices, synthesizeSpeech } from "./googleTts.js";
 import { ensureLocalizedStoryClosing, getLocalizedGoodNightLine } from "../shared/story-closing.js";
 import { getStoryOutputTokenLimit, getStoryTargetWordCount } from "../shared/story-generation.js";
 import { getStoryGenerationSettings } from "./story-generation-config.js";
+import { parseStoryOutput, sanitizeStoryParagraph } from "../shared/story-output.js";
+import { TRPCError } from "@trpc/server";
 
 function getClientIp(req: { ip?: string; headers: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -159,23 +161,7 @@ export const appRouter = router({
             ? rawContent
             : rawContent.map((c) => (c.type === "text" ? c.text : "")).join("");
 
-        // Helper: extract JSON object from any surrounding text/fences
-        function extractJson(text: string): { title?: string; paragraphs?: string[] } | null {
-          let s = text.trim();
-          // Strip opening/closing backtick fences (with or without closing fence)
-          s = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-          // Find the first { ... } block
-          const start = s.indexOf("{");
-          const end = s.lastIndexOf("}");
-          if (start === -1 || end <= start) return null;
-          try {
-            return JSON.parse(s.slice(start, end + 1));
-          } catch {
-            return null;
-          }
-        }
-
-        let parsed: { title?: string; paragraphs?: string[] } | null = extractJson(raw);
+        let parsed = parseStoryOutput(raw);
 
         // If first attempt failed (e.g. model returned only backticks), retry with a direct prompt
         if (!parsed || !Array.isArray(parsed.paragraphs) || parsed.paragraphs.length === 0) {
@@ -200,20 +186,31 @@ export const appRouter = router({
             typeof retryContent === "string"
               ? retryContent
               : retryContent.map((c: { type: string; text?: string }) => (c.type === "text" ? c.text ?? "" : "")).join("");
-          parsed = extractJson(retryRaw);
+          parsed = parseStoryOutput(retryRaw);
         }
 
         if (!parsed) {
-          parsed = { title: "A Dreamy Tale", paragraphs: [raw] };
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "STORY_FORMAT_ERROR: The story could not be formatted. Please try again.",
+          });
         }
 
         const title = parsed.title ?? "A Dreamy Tale";
         const rawParagraphs =
           Array.isArray(parsed.paragraphs) && parsed.paragraphs.length > 0
             ? parsed.paragraphs
-            : [raw];
+            : [];
+        if (rawParagraphs.length === 0) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "STORY_FORMAT_ERROR: The story could not be formatted. Please try again.",
+          });
+        }
         const paragraphs = ensureLocalizedStoryClosing(
-          rawParagraphs.map((p: unknown) => (typeof p === "string" ? p : String(p))),
+          rawParagraphs
+            .map((p: unknown) => (typeof p === "string" ? sanitizeStoryParagraph(p) : ""))
+            .filter(Boolean),
           config.language,
           config.childName,
         );

@@ -126,3 +126,6 @@
 - [x] Attach the verified GoogleAlert email channel to the repeated daily-limit alert policy
 - [x] Verify Cloud Monitoring metric and alert policy 11435303686333956391 after deployment
 - [x] Diagnose and fix the live story-generation stall or missing-output failure
+- [x] Fix the on-device story-generation stall and leaked JSON artifact before the bedtime closing
+- [x] Restore the Cloud Shell deployment account and publish the story-generation reliability repair
+- [x] Verify live Cloud Run revision 00014-chz returns clean stories without JSON artifacts

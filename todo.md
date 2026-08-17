@@ -122,3 +122,6 @@
 - [x] Test and verify live enforcement of the 50-story anonymous daily limit
 - [x] Remove the isolated 50-count daily-limit test row with the Cloud SQL administrator identity
 - [x] Verify the existing UTC daily-limit reset boundary
+- [x] Restore and deploy the structured daily-limit monitoring signal
+- [x] Attach the verified GoogleAlert email channel to the repeated daily-limit alert policy
+- [x] Verify Cloud Monitoring metric and alert policy 11435303686333956391 after deployment

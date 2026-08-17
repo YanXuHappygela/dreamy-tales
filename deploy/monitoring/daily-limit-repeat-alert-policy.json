@@ -1,0 +1,22 @@
+{
+  "displayName": "Dreamy Tales: repeated daily-limit hits",
+  "documentation": {
+    "content": "More than 10 anonymous daily-limit hits were detected in 10 minutes. Review Cloud Run request logs and abuse controls before changing the 50-story policy.",
+    "mimeType": "text/markdown"
+  },
+  "conditions": [
+    {
+      "displayName": "More than 10 daily-limit hits in 10 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/dreamy_tales_daily_limit_hits\" AND resource.type=\"cloud_run_revision\" AND resource.label.\"service_name\"=\"dreamy-tales-api\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 10,
+        "duration": "0s",
+        "aggregations": [{ "alignmentPeriod": "600s", "perSeriesAligner": "ALIGN_SUM" }]
+      }
+    }
+  ],
+  "combiner": "OR",
+  "alertStrategy": { "autoClose": "1800s" },
+  "notificationChannels": ["projects/dreamytales-498114/notificationChannels/18000912750911743814"]
+}

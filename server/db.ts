@@ -160,6 +160,21 @@ export function ipToGuestKey(ip: string): string {
   return createHash("sha256").update(ip).digest("hex");
 }
 
+/**
+ * Aggregate Cloud Run warning for monitoring daily-limit pressure. It excludes
+ * raw IP addresses and client keys so alerting cannot become device tracking.
+ */
+export function createDailyLimitReachedLog(date: string) {
+  return {
+    severity: "WARNING",
+    event: "daily_limit_reached",
+    service: "dreamy-tales-api",
+    limit: DAILY_STORY_LIMIT,
+    resetBoundary: "UTC_MIDNIGHT",
+    date,
+  };
+}
+
 function describeMySqlError(error: unknown): string {
   const source =
     error && typeof error === "object" && "cause" in error && (error as { cause?: unknown }).cause
@@ -225,6 +240,7 @@ export async function incrementStoryUsage(ip: string): Promise<number> {
       .update(anonymousStoryUsage)
       .set({ count: sql`${anonymousStoryUsage.count} - 1` })
       .where(and(eq(anonymousStoryUsage.clientKey, clientKey), eq(anonymousStoryUsage.date, today)));
+    console.warn(JSON.stringify(createDailyLimitReachedLog(today)));
     throw new Error(
       `DAILY_LIMIT_REACHED:You've used all ${DAILY_STORY_LIMIT} stories for today. Come back tomorrow for more magical tales!`
     );

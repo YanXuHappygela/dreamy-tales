@@ -116,3 +116,4 @@
 - [x] Revoke cloudsqlsuperuser from the Cloud SQL runtime application account and verify least-privilege grants
 - [x] Restart and validate the Dreamy Tales development server
 - [x] Design a secure mobile authentication or attestation gateway for private Cloud Run access
+- [x] Document exact execution steps for Firebase App Check, gateway verification, and private Cloud Run rollout

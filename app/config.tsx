@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
   View, Text, ScrollView, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Platform, Dimensions, Animated, Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { trpc } from "@/lib/trpc";
 import { GeneratedStory } from "@/shared/types";
@@ -12,6 +12,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { LoadingStory } from "@/components/loading-story";
 import { loadSettings } from "@/app/settings";
 import { saveActiveStory } from "@/lib/story-navigation";
+import { buildSettingsSummary } from "@/lib/settings-summary";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -108,17 +109,15 @@ export default function ConfigScreen() {
   const [lengthMinutes, setLengthMinutes] = useState(5);
   const [settingsSummary, setSettingsSummary] = useState("");
 
-  useEffect(() => {
-    loadSettings().then((s) => {
-      const name = s.childName?.trim();
-      const parts = [
-        name ? `👤 ${name}` : null,
-        `🎂 ${s.ageGroup} yrs`,
-        `🌐 ${s.language}`,
-      ].filter(Boolean);
-      setSettingsSummary(parts.join("  ·  "));
-    });
+  const refreshSettingsSummary = useCallback(async () => {
+    const settings = await loadSettings();
+    setSettingsSummary(buildSettingsSummary(settings));
   }, []);
+
+  // Settings is a separate route; refresh when returning so the banner never shows stale values.
+  useFocusEffect(useCallback(() => {
+    void refreshSettingsSummary();
+  }, [refreshSettingsSummary]));
 
   const generateMutation = trpc.story.generate.useMutation({
     onSuccess: async (data: GeneratedStory) => {

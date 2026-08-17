@@ -129,3 +129,4 @@
 - [x] Fix the on-device story-generation stall and leaked JSON artifact before the bedtime closing
 - [x] Restore the Cloud Shell deployment account and publish the story-generation reliability repair
 - [x] Verify live Cloud Run revision 00014-chz returns clean stories without JSON artifacts
+- [x] Refresh the Create Story configuration header after settings changes so it shows the latest age and language

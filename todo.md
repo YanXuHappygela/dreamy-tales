@@ -113,3 +113,5 @@
 - [x] Correct the application account’s effective INSERT and UPDATE privileges on anonymous_story_usage
 - [x] Capture the underlying Cloud Run counter-write error and apply the database-compatible repair
 - [x] Review app-to-server security risks and document prioritized mitigations
+- [x] Revoke cloudsqlsuperuser from the Cloud SQL runtime application account and verify least-privilege grants
+- [x] Restart and validate the Dreamy Tales development server

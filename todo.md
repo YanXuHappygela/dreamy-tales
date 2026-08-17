@@ -117,3 +117,4 @@
 - [x] Restart and validate the Dreamy Tales development server
 - [x] Design a secure mobile authentication or attestation gateway for private Cloud Run access
 - [x] Document exact execution steps for Firebase App Check, gateway verification, and private Cloud Run rollout
+- [x] Guide registration of iOS and Android Firebase App Check providers and a safe enforcement rollout

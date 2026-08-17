@@ -137,3 +137,4 @@
 - [x] Push the Dreamy Tales main branch to the new YanXuHappygela/dreamy-tales repository
 - [x] Switch GitHub publishing authentication to YanXuHappygela
 - [x] Verify YanXuHappygela GitHub authorization and push the prepared main branch
+- [x] Prevent the web preview from requesting a wake lock while the page is hidden

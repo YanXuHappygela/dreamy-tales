@@ -20,6 +20,7 @@ import { loadSettings } from "@/app/settings";
 import { synthesizeParagraphsInParallel } from "@/lib/parallel-synthesis";
 import { getNarrationFilename } from "@/lib/narration-storage";
 import { loadActiveStory, saveActiveStory } from "@/lib/story-navigation";
+import { shouldUseKeepAwake } from "@/lib/keep-awake-policy";
 
 const Y = "#FFD580";
 const Y_DIM = "#3D3010";
@@ -65,7 +66,9 @@ async function saveNarrationOnDevice(
 }
 
 export default function StoryScreen() {
-  useKeepAwake();
+  if (shouldUseKeepAwake(Platform.OS)) {
+    useKeepAwake();
+  }
   const router = useRouter();
   const params = useLocalSearchParams<{ storyId?: string; storyData?: string }>();
   const [story, setStory] = useState<GeneratedStory | null>(null);
